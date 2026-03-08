@@ -1,0 +1,37 @@
+{
+  "query": "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 22tmgWE1Pe5wyaZ.736b16e51fc9 --database DfQ2K3s8NcPhVnJTtbm3BM --execute SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME;",
+  "rows": [
+    {
+      "TABLE_NAME": "__drizzle_migrations"
+    },
+    {
+      "TABLE_NAME": "alertas"
+    },
+    {
+      "TABLE_NAME": "clientes"
+    },
+    {
+      "TABLE_NAME": "equipe"
+    },
+    {
+      "TABLE_NAME": "estoque"
+    },
+    {
+      "TABLE_NAME": "import_logs"
+    },
+    {
+      "TABLE_NAME": "produtos"
+    },
+    {
+      "TABLE_NAME": "users"
+    },
+    {
+      "TABLE_NAME": "vendas"
+    }
+  ],
+  "messages": [],
+  "stdout": "TABLE_NAME\n__drizzle_migrations\nalertas\nclientes\nequipe\nestoque\nimport_logs\nprodutos\nusers\nvendas\n",
+  "stderr": "",
+  "execution_time_ms": 343
+}

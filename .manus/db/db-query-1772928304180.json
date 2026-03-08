@@ -1,0 +1,130 @@
+{
+  "query": "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'produtos' ORDER BY ordinal_position LIMIT 30;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 22tmgWE1Pe5wyaZ.736b16e51fc9 --database DfQ2K3s8NcPhVnJTtbm3BM --execute SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'produtos' ORDER BY ordinal_position LIMIT 30;",
+  "rows": [
+    {
+      "column_name": "id",
+      "data_type": "int"
+    },
+    {
+      "column_name": "empresa",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "cod_produto",
+      "data_type": "int"
+    },
+    {
+      "column_name": "nome",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "descricao",
+      "data_type": "text"
+    },
+    {
+      "column_name": "cod_fornecedor",
+      "data_type": "int"
+    },
+    {
+      "column_name": "desc_fornecedor",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "cod_grupo",
+      "data_type": "int"
+    },
+    {
+      "column_name": "desc_grupo",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "cod_subgrupo",
+      "data_type": "int"
+    },
+    {
+      "column_name": "desc_subgrupo",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "cod_categoria",
+      "data_type": "int"
+    },
+    {
+      "column_name": "desc_categoria",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "categoria",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "marca",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "grupo",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "sabor",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "tamanho",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "unidade",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "preco",
+      "data_type": "decimal"
+    },
+    {
+      "column_name": "preco_custo",
+      "data_type": "decimal"
+    },
+    {
+      "column_name": "preco_venda",
+      "data_type": "decimal"
+    },
+    {
+      "column_name": "margem",
+      "data_type": "decimal"
+    },
+    {
+      "column_name": "sku",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "codigo_barras",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "ativo",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "bloqueado",
+      "data_type": "varchar"
+    },
+    {
+      "column_name": "data_cadastro",
+      "data_type": "date"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp"
+    },
+    {
+      "column_name": "updated_at",
+      "data_type": "timestamp"
+    }
+  ],
+  "messages": [],
+  "stdout": "column_name\tdata_type\nid\tint\nempresa\tvarchar\ncod_produto\tint\nnome\tvarchar\ndescricao\ttext\ncod_fornecedor\tint\ndesc_fornecedor\tvarchar\ncod_grupo\tint\ndesc_grupo\tvarchar\ncod_subgrupo\tint\ndesc_subgrupo\tvarchar\ncod_categoria\tint\ndesc_categoria\tvarchar\ncategoria\tvarchar\nmarca\tvarchar\ngrupo\tvarchar\nsabor\tvarchar\ntamanho\tvarchar\nunidade\tvarchar\npreco\tdecimal\npreco_custo\tdecimal\npreco_venda\tdecimal\nmargem\tdecimal\nsku\tvarchar\ncodigo_barras\tvarchar\nativo\tvarchar\nbloqueado\tvarchar\ndata_cadastro\tdate\ncreated_at\ttimestamp\nupdated_at\ttimestamp\n",
+  "stderr": "",
+  "execution_time_ms": 410
+}

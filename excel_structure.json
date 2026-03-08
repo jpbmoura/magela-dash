@@ -1,0 +1,594 @@
+{
+  "PRODUTOS": {
+    "columns": [
+      {
+        "original": "EMPRESA",
+        "normalized": "empresa"
+      },
+      {
+        "original": "COD. PROD",
+        "normalized": "codProd"
+      },
+      {
+        "original": "PRODUTO",
+        "normalized": "produto"
+      },
+      {
+        "original": "MARCA",
+        "normalized": "marca"
+      },
+      {
+        "original": "CATEGORIA",
+        "normalized": "categoria"
+      },
+      {
+        "original": "GRUPO",
+        "normalized": "grupo"
+      },
+      {
+        "original": "SABOR",
+        "normalized": "sabor"
+      },
+      {
+        "original": "QTD. EMB",
+        "normalized": "qtdEmb"
+      },
+      {
+        "original": "LOCALIZACAO",
+        "normalized": "localizacao"
+      },
+      {
+        "original": "QTD. MULTIPLO",
+        "normalized": "qtdMultiplo"
+      },
+      {
+        "original": "STATUS ESTOQUE",
+        "normalized": "statusEstoque"
+      },
+      {
+        "original": "ESTOQUE TOTAL UND",
+        "normalized": "estoqueTotalUnd"
+      },
+      {
+        "original": "CAIXA",
+        "normalized": "caixa"
+      },
+      {
+        "original": "UND",
+        "normalized": "und"
+      },
+      {
+        "original": "PESO BRUTO",
+        "normalized": "pesoBruto"
+      },
+      {
+        "original": "NATUREZA DO PRODUTO",
+        "normalized": "naturezaDoProduto"
+      },
+      {
+        "original": "COD. BARRAS",
+        "normalized": "codBarras"
+      },
+      {
+        "original": "NCM",
+        "normalized": "ncm"
+      },
+      {
+        "original": "CEST",
+        "normalized": "cest"
+      },
+      {
+        "original": "INDICADOR ICMS",
+        "normalized": "indicadorIcms"
+      },
+      {
+        "original": "ALIQUOTA ICMS",
+        "normalized": "aliquotaIcms"
+      },
+      {
+        "original": "INDICADOR PIS/COFINS",
+        "normalized": "indicadorPiscofins"
+      },
+      {
+        "original": "CESTA BASICA",
+        "normalized": "cestaBasica"
+      },
+      {
+        "original": "ULTIMO FORNECEDOR",
+        "normalized": "ultimoFornecedor"
+      },
+      {
+        "original": "DATA ULT. COMPRA",
+        "normalized": "dataUltCompra"
+      },
+      {
+        "original": "ULT. NF COMPRA",
+        "normalized": "ultNfCompra"
+      },
+      {
+        "original": "QTD DIAS DA ULT. COMPRA",
+        "normalized": "qtdDiasDaUltCompra"
+      },
+      {
+        "original": "DATA ULT. VENDA",
+        "normalized": "dataUltVenda"
+      },
+      {
+        "original": "QTD DIAS DA ULT. VENDA",
+        "normalized": "qtdDiasDaUltVenda"
+      },
+      {
+        "original": "PREÇO CUSTO",
+        "normalized": "precoCusto"
+      },
+      {
+        "original": "PREÇO COMPRA",
+        "normalized": "precoCompra"
+      },
+      {
+        "original": "PREÇO NOTA",
+        "normalized": "precoNota"
+      },
+      {
+        "original": "PREÇO VENDA",
+        "normalized": "precoVenda"
+      },
+      {
+        "original": "PREÇO PROMOCAO",
+        "normalized": "precoPromocao"
+      },
+      {
+        "original": "PREÇO ESPECIAL (BALCAO)",
+        "normalized": "precoEspecialBalcao"
+      },
+      {
+        "original": "DESC %",
+        "normalized": "desc"
+      },
+      {
+        "original": "STATUS PREÇO/ESTOQUE",
+        "normalized": "statusPrecoestoque"
+      },
+      {
+        "original": "SOFMOB",
+        "normalized": "sofmob"
+      },
+      {
+        "original": "STATUS",
+        "normalized": "status"
+      }
+    ],
+    "total_columns": 39,
+    "total_rows": 2950
+  },
+  "CLIENTES": {
+    "columns": [
+      {
+        "original": "EMPRESA",
+        "normalized": "empresa"
+      },
+      {
+        "original": "COD. CLIENTE",
+        "normalized": "codCliente"
+      },
+      {
+        "original": "RAZAO SOCIAL",
+        "normalized": "razaoSocial"
+      },
+      {
+        "original": "FANTASIA",
+        "normalized": "fantasia"
+      },
+      {
+        "original": "CPF OU CNPJ",
+        "normalized": "cpfOuCnpj"
+      },
+      {
+        "original": "TIPO CLIENTE",
+        "normalized": "tipoCliente"
+      },
+      {
+        "original": "INSC. ESTADUAL",
+        "normalized": "inscEstadual"
+      },
+      {
+        "original": "COD. VENDEDOR",
+        "normalized": "codVendedor"
+      },
+      {
+        "original": "VENDEDOR",
+        "normalized": "vendedor"
+      },
+      {
+        "original": "COD. SUP",
+        "normalized": "codSup"
+      },
+      {
+        "original": "COD. GER",
+        "normalized": "codGer"
+      },
+      {
+        "original": "TIPO_VENDEDOR",
+        "normalized": "tipo_vendedor"
+      },
+      {
+        "original": "FUNÇÃO",
+        "normalized": "funcao"
+      },
+      {
+        "original": "CANAL",
+        "normalized": "canal"
+      },
+      {
+        "original": "COD. FREQ VISITA",
+        "normalized": "codFreqVisita"
+      },
+      {
+        "original": "FREQUENCIA VISITA",
+        "normalized": "frequenciaVisita"
+      },
+      {
+        "original": "COD. VISITA",
+        "normalized": "codVisita"
+      },
+      {
+        "original": "VISITA",
+        "normalized": "visita"
+      },
+      {
+        "original": "COND. PAG",
+        "normalized": "condPag"
+      },
+      {
+        "original": "DT. ULT COMPRA",
+        "normalized": "dtUltCompra"
+      },
+      {
+        "original": "LIMITE CREDITO",
+        "normalized": "limiteCredito"
+      },
+      {
+        "original": "CEP",
+        "normalized": "cep"
+      },
+      {
+        "original": "ENDEREÇO",
+        "normalized": "endereco"
+      },
+      {
+        "original": "NUMERO",
+        "normalized": "numero"
+      },
+      {
+        "original": "COMPLEMENTO",
+        "normalized": "complemento"
+      },
+      {
+        "original": "BAIRRO",
+        "normalized": "bairro"
+      },
+      {
+        "original": "CIDADE",
+        "normalized": "cidade"
+      },
+      {
+        "original": "UF",
+        "normalized": "uf"
+      },
+      {
+        "original": "COD. REGIAO",
+        "normalized": "codRegiao"
+      },
+      {
+        "original": "REGIAO",
+        "normalized": "regiao"
+      },
+      {
+        "original": "TELEFONE 01",
+        "normalized": "telefone01"
+      },
+      {
+        "original": "TELEFONE 02",
+        "normalized": "telefone02"
+      },
+      {
+        "original": "EMAIL",
+        "normalized": "email"
+      },
+      {
+        "original": "LATITUDE",
+        "normalized": "latitude"
+      },
+      {
+        "original": "LONGITUDE",
+        "normalized": "longitude"
+      },
+      {
+        "original": "DATA CADASTRO",
+        "normalized": "dataCadastro"
+      },
+      {
+        "original": "ATIVO",
+        "normalized": "ativo"
+      },
+      {
+        "original": "BLOQUEADO",
+        "normalized": "bloqueado"
+      }
+    ],
+    "total_columns": 38,
+    "total_rows": 1330
+  },
+  "EQUIPE": {
+    "columns": [
+      {
+        "original": "EMPRESA",
+        "normalized": "empresa"
+      },
+      {
+        "original": "COD. VENDEDOR",
+        "normalized": "codVendedor"
+      },
+      {
+        "original": "VENDEDOR",
+        "normalized": "vendedor"
+      },
+      {
+        "original": "COD. SUP",
+        "normalized": "codSup"
+      },
+      {
+        "original": "FUNCAO",
+        "normalized": "funcao"
+      },
+      {
+        "original": "COD. GER",
+        "normalized": "codGer"
+      },
+      {
+        "original": "TIPO",
+        "normalized": "tipo"
+      },
+      {
+        "original": "EMPRESA RESPONSAVEL",
+        "normalized": "empresaResponsavel"
+      }
+    ],
+    "total_columns": 8,
+    "total_rows": 17
+  },
+  "DADOS": {
+    "columns": [
+      {
+        "original": "EMPRESA",
+        "normalized": "empresa"
+      },
+      {
+        "original": "STATUS",
+        "normalized": "status"
+      },
+      {
+        "original": "OCORRENCIA",
+        "normalized": "ocorrencia"
+      },
+      {
+        "original": "EMISSAO DATA",
+        "normalized": "emissaoData"
+      },
+      {
+        "original": "EMISSAO ANO MES",
+        "normalized": "emissaoAnoMes"
+      },
+      {
+        "original": "ACERTO DATA",
+        "normalized": "acertoData"
+      },
+      {
+        "original": "ACERTO ANO MES",
+        "normalized": "acertoAnoMes"
+      },
+      {
+        "original": "ANO",
+        "normalized": "ano"
+      },
+      {
+        "original": "Nº. VENDA",
+        "normalized": "nºVenda"
+      },
+      {
+        "original": "Nº LOTE",
+        "normalized": "nºLote"
+      },
+      {
+        "original": "Nº NOTA",
+        "normalized": "nºNota"
+      },
+      {
+        "original": "MOD_NF",
+        "normalized": "mod_nf"
+      },
+      {
+        "original": "COD. CLIENTE",
+        "normalized": "codCliente"
+      },
+      {
+        "original": "RAZAO SOCIAL",
+        "normalized": "razaoSocial"
+      },
+      {
+        "original": "FANTASIA",
+        "normalized": "fantasia"
+      },
+      {
+        "original": "CPF OU CNPJ",
+        "normalized": "cpfOuCnpj"
+      },
+      {
+        "original": "CANAL",
+        "normalized": "canal"
+      },
+      {
+        "original": "CIDADE",
+        "normalized": "cidade"
+      },
+      {
+        "original": "COD. VENDEDOR",
+        "normalized": "codVendedor"
+      },
+      {
+        "original": "COD. SUP",
+        "normalized": "codSup"
+      },
+      {
+        "original": "COD. GER",
+        "normalized": "codGer"
+      },
+      {
+        "original": "FUNÇÃO",
+        "normalized": "funcao"
+      },
+      {
+        "original": "CFOP",
+        "normalized": "cfop"
+      },
+      {
+        "original": "TIPO_COB",
+        "normalized": "tipo_cob"
+      },
+      {
+        "original": "PRAZO",
+        "normalized": "prazo"
+      },
+      {
+        "original": "IDVendaItens",
+        "normalized": "idvendaitens"
+      },
+      {
+        "original": "COD. PRODUTO",
+        "normalized": "codProduto"
+      },
+      {
+        "original": "PRODUTO",
+        "normalized": "produto"
+      },
+      {
+        "original": "QTD. EMB",
+        "normalized": "qtdEmb"
+      },
+      {
+        "original": "MARCA",
+        "normalized": "marca"
+      },
+      {
+        "original": "CATEGORIA",
+        "normalized": "categoria"
+      },
+      {
+        "original": "GRUPO",
+        "normalized": "grupo"
+      },
+      {
+        "original": "SABOR",
+        "normalized": "sabor"
+      },
+      {
+        "original": "MOTORISTA",
+        "normalized": "motorista"
+      },
+      {
+        "original": "AJUDANTE 1",
+        "normalized": "ajudante1"
+      },
+      {
+        "original": "AJUDANTE 2",
+        "normalized": "ajudante2"
+      },
+      {
+        "original": "PLACA",
+        "normalized": "placa"
+      },
+      {
+        "original": "ITEM C/ DEV",
+        "normalized": "itemCDev"
+      },
+      {
+        "original": "DEV. MOTIVO",
+        "normalized": "devMotivo"
+      },
+      {
+        "original": "PESO",
+        "normalized": "peso"
+      },
+      {
+        "original": "QTD. UND VDA",
+        "normalized": "qtdUndVda"
+      },
+      {
+        "original": "QTD. UND BONIF",
+        "normalized": "qtdUndBonif"
+      },
+      {
+        "original": "QTD. UND TROCA",
+        "normalized": "qtdUndTroca"
+      },
+      {
+        "original": "QTD. CX VDA",
+        "normalized": "qtdCxVda"
+      },
+      {
+        "original": "QTD. CX REM",
+        "normalized": "qtdCxRem"
+      },
+      {
+        "original": "QTD. CX DEV",
+        "normalized": "qtdCxDev"
+      },
+      {
+        "original": "QTD. UND DEVOL",
+        "normalized": "qtdUndDevol"
+      },
+      {
+        "original": "VLR. REMET",
+        "normalized": "vlrRemet"
+      },
+      {
+        "original": "VLR. DEV",
+        "normalized": "vlrDev"
+      },
+      {
+        "original": "VLR VDA",
+        "normalized": "vlrVda"
+      },
+      {
+        "original": "VLR. CX",
+        "normalized": "vlrCx"
+      },
+      {
+        "original": "VLR. UND TAB",
+        "normalized": "vlrUndTab"
+      },
+      {
+        "original": "VLR. UND VDA",
+        "normalized": "vlrUndVda"
+      },
+      {
+        "original": "DESC. PERC",
+        "normalized": "descPerc"
+      },
+      {
+        "original": "DESC. VLR",
+        "normalized": "descVlr"
+      },
+      {
+        "original": "VLR. DESC. ITEM",
+        "normalized": "vlrDescItem"
+      },
+      {
+        "original": "DESC. VENDEDOR PERC",
+        "normalized": "descVendedorPerc"
+      }
+    ],
+    "total_columns": 57,
+    "total_rows": 15508
+  }
+}

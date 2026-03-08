@@ -1,0 +1,8 @@
+{
+  "query": "SELECT cod_produto, nome, estoque, estoque_minimo FROM produtos LIMIT 20;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 22tmgWE1Pe5wyaZ.736b16e51fc9 --database DfQ2K3s8NcPhVnJTtbm3BM --execute SELECT cod_produto, nome, estoque, estoque_minimo FROM produtos LIMIT 20;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'estoque' in 'field list'"
+  ]
+}

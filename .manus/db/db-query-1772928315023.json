@@ -1,0 +1,100 @@
+{
+  "query": "SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'produtos' ORDER BY ordinal_position;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 22tmgWE1Pe5wyaZ.736b16e51fc9 --database DfQ2K3s8NcPhVnJTtbm3BM --execute SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'produtos' ORDER BY ordinal_position;",
+  "rows": [
+    {
+      "column_name": "id"
+    },
+    {
+      "column_name": "empresa"
+    },
+    {
+      "column_name": "cod_produto"
+    },
+    {
+      "column_name": "nome"
+    },
+    {
+      "column_name": "descricao"
+    },
+    {
+      "column_name": "cod_fornecedor"
+    },
+    {
+      "column_name": "desc_fornecedor"
+    },
+    {
+      "column_name": "cod_grupo"
+    },
+    {
+      "column_name": "desc_grupo"
+    },
+    {
+      "column_name": "cod_subgrupo"
+    },
+    {
+      "column_name": "desc_subgrupo"
+    },
+    {
+      "column_name": "cod_categoria"
+    },
+    {
+      "column_name": "desc_categoria"
+    },
+    {
+      "column_name": "categoria"
+    },
+    {
+      "column_name": "marca"
+    },
+    {
+      "column_name": "grupo"
+    },
+    {
+      "column_name": "sabor"
+    },
+    {
+      "column_name": "tamanho"
+    },
+    {
+      "column_name": "unidade"
+    },
+    {
+      "column_name": "preco"
+    },
+    {
+      "column_name": "preco_custo"
+    },
+    {
+      "column_name": "preco_venda"
+    },
+    {
+      "column_name": "margem"
+    },
+    {
+      "column_name": "sku"
+    },
+    {
+      "column_name": "codigo_barras"
+    },
+    {
+      "column_name": "ativo"
+    },
+    {
+      "column_name": "bloqueado"
+    },
+    {
+      "column_name": "data_cadastro"
+    },
+    {
+      "column_name": "created_at"
+    },
+    {
+      "column_name": "updated_at"
+    }
+  ],
+  "messages": [],
+  "stdout": "column_name\nid\nempresa\ncod_produto\nnome\ndescricao\ncod_fornecedor\ndesc_fornecedor\ncod_grupo\ndesc_grupo\ncod_subgrupo\ndesc_subgrupo\ncod_categoria\ndesc_categoria\ncategoria\nmarca\ngrupo\nsabor\ntamanho\nunidade\npreco\npreco_custo\npreco_venda\nmargem\nsku\ncodigo_barras\nativo\nbloqueado\ndata_cadastro\ncreated_at\nupdated_at\n",
+  "stderr": "",
+  "execution_time_ms": 357
+}
