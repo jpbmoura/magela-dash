@@ -33,11 +33,41 @@ const menuItems = [
     path: "/dashboard",
     group: "main",
   },
-  { icon: Users, label: "Clientes", path: "/clientes", group: "monitores" },
-  { icon: ShoppingCart, label: "Vendas", path: "/vendas", group: "monitores" },
-  { icon: Warehouse, label: "Estoque", path: "/estoque", group: "monitores" },
-  { icon: Package, label: "Produtos", path: "/produtos", group: "monitores" },
-  { icon: UserSquare2, label: "Equipe", path: "/equipe", group: "monitores" },
+  {
+    icon: Users,
+    color: "blue-500",
+    label: "Clientes",
+    path: "/clientes",
+    group: "monitores",
+  },
+  {
+    icon: ShoppingCart,
+    color: "purple-500",
+    label: "Vendas",
+    path: "/vendas",
+    group: "monitores",
+  },
+  {
+    icon: Warehouse,
+    color: "amber-500",
+    label: "Estoque",
+    path: "/estoque",
+    group: "monitores",
+  },
+  {
+    icon: Package,
+    color: "rose-500",
+    label: "Produtos",
+    path: "/produtos",
+    group: "monitores",
+  },
+  {
+    icon: UserSquare2,
+    color: "emerald-500",
+    label: "Equipe",
+    path: "/equipe",
+    group: "monitores",
+  },
   {
     icon: RefreshCw,
     label: "Atualizar Base",
@@ -137,7 +167,7 @@ function DashboardLayoutContent({
           className="h-9 gap-3 rounded-lg font-normal text-sm transition-all"
         >
           <Icon
-            className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`}
+            className={`h-4 w-4 shrink-0 ${isActive ? `text-${item.color}` : "text-muted-foreground"}`}
           />
           <span className={isActive ? "font-medium" : ""}>{item.label}</span>
         </SidebarMenuButton>
@@ -156,20 +186,13 @@ function DashboardLayoutContent({
           {/* Header / Logo */}
           <SidebarHeader className="h-14 border-b px-3 justify-center">
             <div className="flex items-center gap-2.5">
-              <button
-                onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors shrink-0 focus:outline-none"
-                aria-label="Recolher menu"
-              >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
-              </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center shrink-0">
                     <BarChart2 className="h-3.5 w-3.5 text-primary-foreground" />
                   </div>
-                  <span className="font-semibold text-sm tracking-tight truncate">
-                    Magela Dashboard
+                  <span className="font-bold text-lg tracking-tight truncate">
+                    CompletEin
                   </span>
                 </div>
               )}
@@ -209,7 +232,7 @@ function DashboardLayoutContent({
           <SidebarFooter className="border-t p-3">
             {!isCollapsed && (
               <p className="text-[10px] text-muted-foreground/50 text-center select-none">
-                Magela Dashboard v1.0
+                CompletEin v1.0
               </p>
             )}
           </SidebarFooter>

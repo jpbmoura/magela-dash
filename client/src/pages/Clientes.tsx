@@ -259,7 +259,7 @@ export default function Clientes() {
           icon={Users}
           title="Monitor de Clientes"
           description="Rankings, análise de comportamento e segmentação de clientes"
-          accent="indigo"
+          accent="blue"
         />
         <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
           {PERIODS.map(p => (

@@ -5,12 +5,13 @@ interface PageHeaderProps {
   icon?: LucideIcon;
   title: string;
   description?: string;
-  accent?: "indigo" | "emerald" | "amber" | "rose" | "sky" | "violet";
+  accent?: "indigo" | "emerald" | "amber" | "rose" | "sky" | "violet" | "blue";
   children?: React.ReactNode;
   className?: string;
 }
 
 const accentMap = {
+  blue: "bg-blue-500/10 text-blue-500",
   indigo: "bg-indigo-500/10 text-indigo-500",
   emerald: "bg-emerald-500/10 text-emerald-600",
   amber: "bg-amber-500/10 text-amber-600",
@@ -31,16 +32,27 @@ export function PageHeader({
     <div className={cn("flex items-start justify-between gap-4", className)}>
       <div className="flex items-center gap-3">
         {Icon && (
-          <div className={cn("h-9 w-9 rounded-xl flex items-center justify-center shrink-0", accentMap[accent])}>
+          <div
+            className={cn(
+              "h-9 w-9 rounded-xl flex items-center justify-center shrink-0",
+              accentMap[accent]
+            )}
+          >
             <Icon className="h-4.5 w-4.5" />
           </div>
         )}
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-          {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
+          {description && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {description}
+            </p>
+          )}
         </div>
       </div>
-      {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
+      {children && (
+        <div className="flex items-center gap-2 shrink-0">{children}</div>
+      )}
     </div>
   );
 }
