@@ -298,3 +298,30 @@ export const alertas = mysqlTable("alertas", {
 
 export type Alerta = typeof alertas.$inferSelect;
 export type InsertAlerta = typeof alertas.$inferInsert;
+
+/**
+ * DRE Gerencial Mensal - Monthly managerial income statement with EBITDA
+ */
+export const dreGerencialMensal = mysqlTable("dre_gerencial_mensal", {
+  id: int("id").autoincrement().primaryKey(),
+  competencia: varchar("competencia", { length: 7 }).notNull(),
+  receitaBrutaManual: decimal("receita_bruta_manual", { precision: 14, scale: 2 }),
+  deducoesReceita: decimal("deducoes_receita", { precision: 14, scale: 2 }).notNull().default("0"),
+  custosVariaveis: decimal("custos_variaveis", { precision: 14, scale: 2 }).notNull().default("0"),
+  despesasPessoal: decimal("despesas_pessoal", { precision: 14, scale: 2 }).notNull().default("0"),
+  despesasAdministrativas: decimal("despesas_administrativas", { precision: 14, scale: 2 }).notNull().default("0"),
+  despesasComerciais: decimal("despesas_comerciais", { precision: 14, scale: 2 }).notNull().default("0"),
+  despesasGerais: decimal("despesas_gerais", { precision: 14, scale: 2 }).notNull().default("0"),
+  depreciacaoAmortizacao: decimal("depreciacao_amortizacao", { precision: 14, scale: 2 }).notNull().default("0"),
+  resultadoFinanceiro: decimal("resultado_financeiro", { precision: 14, scale: 2 }).notNull().default("0"),
+  irCsll: decimal("ir_csll", { precision: 14, scale: 2 }).notNull().default("0"),
+  observacoes: text("observacoes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  competenciaUnique: unique("dre_competencia_unique").on(table.competencia),
+  competenciaIdx: index("dre_competencia_idx").on(table.competencia),
+}));
+
+export type DreGerencialMensal = typeof dreGerencialMensal.$inferSelect;
+export type InsertDreGerencialMensal = typeof dreGerencialMensal.$inferInsert;

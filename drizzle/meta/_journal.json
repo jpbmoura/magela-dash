@@ -15,6 +15,13 @@
       "when": 1772929489245,
       "tag": "0001_bouncy_lightspeed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1774014820767,
+      "tag": "0002_absurd_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

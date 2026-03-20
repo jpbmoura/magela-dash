@@ -11,15 +11,16 @@ import {
   estoque,
   equipe,
   vendas,
-
   importLogs,
   alertas,
+  dreGerencialMensal,
   type Cliente,
   type Produto,
   type Estoque,
   type Equipe,
   type Venda,
   type Alerta,
+  type InsertDreGerencialMensal,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1222,4 +1223,72 @@ export async function getProdutosPorStatusEstoque() {
     else stats.inativo += Number(row.count);
   }
   return stats;
+}
+
+// ============= DRE GERENCIAL MENSAL =============
+
+export async function createDreGerencial(data: Omit<InsertDreGerencialMensal, "id" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(dreGerencialMensal).values(data);
+  const [row] = await db.select().from(dreGerencialMensal).where(eq(dreGerencialMensal.competencia, data.competencia));
+  return row;
+}
+
+export async function getDreByCompetencia(competencia: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(dreGerencialMensal).where(eq(dreGerencialMensal.competencia, competencia));
+  return row ?? null;
+}
+
+export async function listDreGerencial() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(dreGerencialMensal).orderBy(desc(dreGerencialMensal.competencia));
+}
+
+export async function updateDreGerencial(id: number, data: Partial<Omit<InsertDreGerencialMensal, "id" | "createdAt" | "updatedAt">>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(dreGerencialMensal).set(data).where(eq(dreGerencialMensal.id, id));
+  const [row] = await db.select().from(dreGerencialMensal).where(eq(dreGerencialMensal.id, id));
+  return row;
+}
+
+export async function deleteDreGerencial(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(dreGerencialMensal).where(eq(dreGerencialMensal.id, id));
+  return { success: true };
+}
+
+export async function getFaturamentoByCompetencia(competencia: string) {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.select({
+    total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(14,2))), 0)`,
+  })
+    .from(vendas)
+    .where(eq(vendas.emissaoAnoMes, competencia));
+  return Number(result?.total ?? 0);
+}
+
+export async function getFaturamentoMensalMap(): Promise<Record<string, number>> {
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db.select({
+    mes: vendas.emissaoAnoMes,
+    total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(14,2))), 0)`,
+  })
+    .from(vendas)
+    .where(sql`${vendas.emissaoAnoMes} IS NOT NULL`)
+    .groupBy(vendas.emissaoAnoMes)
+    .orderBy(vendas.emissaoAnoMes);
+
+  const map: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.mes) map[r.mes] = Number(r.total);
+  }
+  return map;
 }

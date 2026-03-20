@@ -48,7 +48,15 @@ import {
   getClientesInativos,
   getClientesNovos,
   getEvolucaoMensalTopClientes,
+  createDreGerencial,
+  getDreByCompetencia,
+  listDreGerencial,
+  updateDreGerencial,
+  deleteDreGerencial,
+  getFaturamentoByCompetencia,
+  getFaturamentoMensalMap,
 } from "./db";
+import { calcularDre } from "../shared/dreCalculations";
 import { notifyOwner } from "./_core/notification";
 
 export const appRouter = router({
@@ -394,6 +402,105 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+  }),
+
+  // ============= DRE GERENCIAL PROCEDURES =============
+  dre: router({
+    create: publicProcedure
+      .input(z.object({
+        competencia: z.string().regex(/^\d{4}-\d{2}$/, "Formato deve ser YYYY-MM"),
+        receitaBrutaManual: z.string().nullable().optional(),
+        deducoesReceita: z.string().optional().default("0"),
+        custosVariaveis: z.string().optional().default("0"),
+        despesasPessoal: z.string().optional().default("0"),
+        despesasAdministrativas: z.string().optional().default("0"),
+        despesasComerciais: z.string().optional().default("0"),
+        despesasGerais: z.string().optional().default("0"),
+        depreciacaoAmortizacao: z.string().optional().default("0"),
+        resultadoFinanceiro: z.string().optional().default("0"),
+        irCsll: z.string().optional().default("0"),
+        observacoes: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const existing = await getDreByCompetencia(input.competencia);
+        if (existing) {
+          throw new Error(`Já existe registro para a competência ${input.competencia}`);
+        }
+        return await createDreGerencial(input);
+      }),
+
+    getByCompetencia: publicProcedure
+      .input(z.object({ competencia: z.string() }))
+      .query(async ({ input }) => {
+        const [dre, faturamento] = await Promise.all([
+          getDreByCompetencia(input.competencia),
+          getFaturamentoByCompetencia(input.competencia),
+        ]);
+        return { dre, faturamento };
+      }),
+
+    list: publicProcedure.query(async () => {
+      const [registros, faturamentoMap] = await Promise.all([
+        listDreGerencial(),
+        getFaturamentoMensalMap(),
+      ]);
+      return registros.map(r => ({
+        ...r,
+        faturamento: faturamentoMap[r.competencia] ?? 0,
+      }));
+    }),
+
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        competencia: z.string().regex(/^\d{4}-\d{2}$/, "Formato deve ser YYYY-MM").optional(),
+        receitaBrutaManual: z.string().nullable().optional(),
+        deducoesReceita: z.string().optional(),
+        custosVariaveis: z.string().optional(),
+        despesasPessoal: z.string().optional(),
+        despesasAdministrativas: z.string().optional(),
+        despesasComerciais: z.string().optional(),
+        despesasGerais: z.string().optional(),
+        depreciacaoAmortizacao: z.string().optional(),
+        resultadoFinanceiro: z.string().optional(),
+        irCsll: z.string().optional(),
+        observacoes: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return await updateDreGerencial(id, data);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteDreGerencial(input.id);
+      }),
+
+    getResumo: publicProcedure.query(async () => {
+      const [registros, faturamentoMap] = await Promise.all([
+        listDreGerencial(),
+        getFaturamentoMensalMap(),
+      ]);
+      return registros.map(r => {
+        const receitaBruta = r.receitaBrutaManual
+          ? Number(r.receitaBrutaManual)
+          : (faturamentoMap[r.competencia] ?? 0);
+        const dre = calcularDre({
+          receitaBruta,
+          deducoesReceita: Number(r.deducoesReceita),
+          custosVariaveis: Number(r.custosVariaveis),
+          despesasPessoal: Number(r.despesasPessoal),
+          despesasAdministrativas: Number(r.despesasAdministrativas),
+          despesasComerciais: Number(r.despesasComerciais),
+          despesasGerais: Number(r.despesasGerais),
+          depreciacaoAmortizacao: Number(r.depreciacaoAmortizacao),
+          resultadoFinanceiro: Number(r.resultadoFinanceiro),
+          irCsll: Number(r.irCsll),
+        });
+        return { competencia: r.competencia, id: r.id, ...dre };
+      });
+    }),
   }),
 });
 

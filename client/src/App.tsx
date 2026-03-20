@@ -12,6 +12,7 @@ import Estoque from "./pages/Estoque";
 import Produtos from "./pages/Produtos";
 import Equipe from "./pages/Equipe";
 import AtualizarBase from "./pages/AtualizarBase";
+import DreGerencial from "./pages/DreGerencial";
 
 function Router() {
   return (
@@ -61,6 +62,13 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Equipe />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path={"/dre-gerencial"}>
+        {() => (
+          <DashboardLayout>
+            <DreGerencial />
           </DashboardLayout>
         )}
       </Route>

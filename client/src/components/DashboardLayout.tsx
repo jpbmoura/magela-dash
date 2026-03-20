@@ -22,6 +22,7 @@ import {
   UserSquare2,
   RefreshCw,
   BarChart2,
+  FileSpreadsheet,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -67,6 +68,13 @@ const menuItems = [
     label: "Equipe",
     path: "/equipe",
     group: "monitores",
+  },
+  {
+    icon: FileSpreadsheet,
+    color: "teal-500",
+    label: "DRE Gerencial",
+    path: "/dre-gerencial",
+    group: "financeiro",
   },
   {
     icon: RefreshCw,
@@ -153,6 +161,7 @@ function DashboardLayoutContent({
 
   const mainItems = menuItems.filter(i => i.group === "main");
   const monitorItems = menuItems.filter(i => i.group === "monitores");
+  const financeiroItems = menuItems.filter(i => i.group === "financeiro");
   const configItems = menuItems.filter(i => i.group === "config");
 
   const renderItem = (item: (typeof menuItems)[0]) => {
@@ -214,6 +223,17 @@ function DashboardLayoutContent({
             {isCollapsed && <div className="h-3" />}
             <SidebarMenu className="gap-0.5">
               {monitorItems.map(renderItem)}
+            </SidebarMenu>
+
+            {/* Financeiro */}
+            {!isCollapsed && (
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 px-2 pt-4 pb-1.5">
+                Financeiro
+              </p>
+            )}
+            {isCollapsed && <div className="h-3" />}
+            <SidebarMenu className="gap-0.5">
+              {financeiroItems.map(renderItem)}
             </SidebarMenu>
 
             {/* Config */}
