@@ -1,11 +1,19 @@
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { KPICard } from "@/components/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   TrendingUp, Users, Package, ShoppingCart, AlertTriangle,
-  DollarSign, Warehouse, Trophy, ArrowRight,
+  DollarSign, Warehouse, Trophy, ArrowRight, CalendarDays,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -21,9 +29,37 @@ function fmtShort(value: number): string {
   return fmt(value);
 }
 
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Jan", "02": "Fev", "03": "Mar", "04": "Abr",
+  "05": "Mai", "06": "Jun", "07": "Jul", "08": "Ago",
+  "09": "Set", "10": "Out", "11": "Nov", "12": "Dez",
+};
+
+function periodLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  return `${MONTH_LABELS[m] ?? m}/${y}`;
+}
+
+function periodToDates(ym: string | undefined) {
+  if (!ym) return {};
+  const [y, m] = ym.split("-").map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m, 0);
+  return { startDate: start, endDate: end };
+}
+
 export default function Dashboard() {
   const [, navigate] = useLocation();
-  const { data: metrics, isLoading } = trpc.dashboard.getMetrics.useQuery();
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
+
+  const { data: availablePeriods } = trpc.dashboard.getAvailablePeriods.useQuery();
+
+  const dateFilter = useMemo(
+    () => selectedPeriod === "all" ? undefined : periodToDates(selectedPeriod),
+    [selectedPeriod]
+  );
+
+  const { data: metrics, isLoading } = trpc.dashboard.getMetrics.useQuery(dateFilter);
   const { data: topClientes } = trpc.dashboard.getTopClientes.useQuery({ limit: 5 });
   const { data: topProdutos } = trpc.dashboard.getTopProdutos.useQuery({ limit: 5 });
   const { data: vendedores } = trpc.dashboard.getVendedores.useQuery({ limit: 5 });
@@ -32,9 +68,27 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Visão geral do negócio em tempo real</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Visão geral do negócio em tempo real</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-44 h-9">
+              <SelectValue placeholder="Período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todo período</SelectItem>
+              {(availablePeriods ?? []).map(p => (
+                <SelectItem key={p} value={p}>
+                  {periodLabel(p)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Primary KPIs */}
@@ -47,7 +101,7 @@ export default function Dashboard() {
           <>
             <KPICard
               title="Faturamento Total"
-              value={fmtShort(metrics?.totalVendas || 0)}
+              value={fmt(metrics?.totalVendas || 0)}
               icon={DollarSign}
               accent="indigo"
             />

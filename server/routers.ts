@@ -48,6 +48,7 @@ import {
   getClientesInativos,
   getClientesNovos,
   getEvolucaoMensalTopClientes,
+  getAvailablePeriods,
   createDreGerencial,
   getDreByCompetencia,
   listDreGerencial,
@@ -174,6 +175,7 @@ export const appRouter = router({
 
     getAlertas: publicProcedure.query(async () => getAlertas(10)),
     getAlertasNaoLidos: publicProcedure.query(async () => getAlertasNaoLidos()),
+    getAvailablePeriods: publicProcedure.query(async () => getAvailablePeriods()),
   }),
 
   // ============= CLIENTES PROCEDURES =============

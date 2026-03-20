@@ -592,6 +592,20 @@ export async function getEquipeCount() {
   return result[0]?.count || 0;
 }
 
+// ============= PERÍODOS DISPONÍVEIS =============
+
+export async function getAvailablePeriods(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.selectDistinct({
+    mes: vendas.emissaoAnoMes,
+  })
+    .from(vendas)
+    .where(sql`${vendas.emissaoAnoMes} IS NOT NULL`)
+    .orderBy(desc(vendas.emissaoAnoMes));
+  return rows.map(r => r.mes!).filter(Boolean);
+}
+
 // ============= VENDAS POR MÊS (GRÁFICO) =============
 
 export async function getVendasPorMes(meses: number = 12) {

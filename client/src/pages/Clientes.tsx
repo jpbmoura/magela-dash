@@ -16,10 +16,18 @@ import {
   MapPin,
   BarChart2,
   List,
+  CalendarDays,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   BarChart,
   Bar,
@@ -53,16 +61,24 @@ const fmtDate = (d: string | null | undefined) => {
   }
 };
 
-// ─── Period config ────────────────────────────────────────────────────────────
-const PERIODS = [
-  {
-    label: "Dez/2025",
-    value: "2025-12",
-    start: "2025-12-01",
-    end: "2025-12-31",
-  },
-  { label: "Todo período", value: "all", start: undefined, end: undefined },
-];
+// ─── Period helpers ───────────────────────────────────────────────────────────
+const MONTH_LABELS: Record<string, string> = {
+  "01": "Jan", "02": "Fev", "03": "Mar", "04": "Abr",
+  "05": "Mai", "06": "Jun", "07": "Jul", "08": "Ago",
+  "09": "Set", "10": "Out", "11": "Nov", "12": "Dez",
+};
+
+function periodLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  return `${MONTH_LABELS[m] ?? m}/${y}`;
+}
+
+function periodToDates(ym: string | undefined): { start?: string; end?: string } {
+  if (!ym) return {};
+  const [y, m] = ym.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return { start: `${ym}-01`, end: `${ym}-${String(lastDay).padStart(2, "0")}` };
+}
 
 type SortField = "valor" | "pedidos" | "ticket";
 type Tab = "ranking" | "top-valor" | "top-pedidos" | "novos" | "inativos";
@@ -149,7 +165,7 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Clientes() {
-  const [period, setPeriod] = useState(PERIODS[0]);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
   const [tab, setTab] = useState<Tab>("ranking");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortField>("valor");
@@ -157,12 +173,21 @@ export default function Clientes() {
   const [selectedCliente, setSelectedCliente] = useState<any>(null);
   const PAGE_SIZE = 20;
 
+  const { data: availablePeriods } = trpc.dashboard.getAvailablePeriods.useQuery();
+
+  const dates = useMemo(
+    () => selectedPeriod === "all" ? {} : periodToDates(selectedPeriod),
+    [selectedPeriod]
+  );
+
+  const currentLabel = selectedPeriod === "all" ? "Todo período" : periodLabel(selectedPeriod);
+
   const periodInput = useMemo(
     () => ({
-      dataInicio: period.start,
-      dataFim: period.end,
+      dataInicio: dates.start,
+      dataFim: dates.end,
     }),
-    [period]
+    [dates]
   );
 
   const { data: kpis, isLoading: kpisLoading } =
@@ -261,23 +286,24 @@ export default function Clientes() {
           description="Rankings, análise de comportamento e segmentação de clientes"
           accent="blue"
         />
-        <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-1">
-          {PERIODS.map(p => (
-            <button
-              key={p.value}
-              onClick={() => {
-                setPeriod(p);
-                setPage(0);
-              }}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                period.value === p.value
-                  ? "bg-card shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          <Select
+            value={selectedPeriod}
+            onValueChange={v => { setSelectedPeriod(v); setPage(0); }}
+          >
+            <SelectTrigger className="w-44 h-9">
+              <SelectValue placeholder="Período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todo período</SelectItem>
+              {(availablePeriods ?? []).map(p => (
+                <SelectItem key={p} value={p}>
+                  {periodLabel(p)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -301,7 +327,7 @@ export default function Clientes() {
               ? "…"
               : (kpis?.totalComVendas || 0).toLocaleString("pt-BR")
           }
-          sub={period.label}
+          sub={currentLabel}
           iconColor="text-indigo-500"
           accentClass="bg-indigo-500"
         />
@@ -309,7 +335,7 @@ export default function Clientes() {
           icon={TrendingUp}
           label="Faturamento"
           value={kpisLoading ? "…" : fmtShort(kpis?.totalFaturamento || 0)}
-          sub={period.label}
+          sub={currentLabel}
           iconColor="text-green-500"
           accentClass="bg-green-500"
         />
@@ -657,7 +683,7 @@ export default function Clientes() {
             <div className="p-4 border-b border-border/50 flex items-center gap-2">
               <UserPlus className="w-4 h-4 text-amber-500" />
               <h3 className="text-sm font-semibold">
-                Clientes Novos — {period.label}
+                Clientes Novos — {currentLabel}
               </h3>
               <Badge variant="secondary" className="ml-auto">
                 {novos?.total || 0} clientes
@@ -694,7 +720,7 @@ export default function Clientes() {
             <div className="p-4 border-b border-border/50 flex items-center gap-2">
               <UserX className="w-4 h-4 text-red-500" />
               <h3 className="text-sm font-semibold">
-                Clientes Inativos — sem compra em {period.label}
+                Clientes Inativos — sem compra em {currentLabel}
               </h3>
               <Badge variant="destructive" className="ml-auto">
                 {inativos?.total || 0} clientes
