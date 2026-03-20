@@ -1563,7 +1563,7 @@ export default function DreGerencial() {
 
       {/* Mappings Dialog */}
       <Dialog open={showMappings} onOpenChange={setShowMappings}>
-        <DialogContent className="overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings2 className="h-5 w-5" />
@@ -1571,7 +1571,7 @@ export default function DreGerencial() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto min-h-0 flex-1">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
                 Associe cada categoria do Conta Azul a um grupo do DRE
@@ -1624,7 +1624,7 @@ export default function DreGerencial() {
                           })
                         }
                       >
-                        <SelectTrigger className="w-64 h-8 text-xs">
+                        <SelectTrigger className="w-64 h-8 text-xs shrink-0">
                           <SelectValue placeholder="Selecionar grupo..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -1678,7 +1678,7 @@ export default function DreGerencial() {
                               })
                             }
                           >
-                            <SelectTrigger className="w-64 h-8 text-xs">
+                            <SelectTrigger className="w-64 h-8 text-xs shrink-0">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
