@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { ENV } from "../_core/env";
 import { getDb } from "../db";
 import { contaAzulConnection } from "../../drizzle/schema";
@@ -62,28 +62,28 @@ export async function saveConnection(tokens: {
   const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
   const now = new Date();
 
-  const existing = await getActiveConnection();
-  if (existing) {
-    await db
-      .update(contaAzulConnection)
-      .set({
-        status: "connected",
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        tokenExpiresAt: expiresAt,
-        connectedAt: now,
-      })
-      .where(eq(contaAzulConnection.id, existing.id));
-    return;
-  }
+  const [existing] = await db
+    .select()
+    .from(contaAzulConnection)
+    .limit(1);
 
-  await db.insert(contaAzulConnection).values({
-    status: "connected",
+  const data = {
+    status: "connected" as const,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     tokenExpiresAt: expiresAt,
     connectedAt: now,
-  });
+  };
+
+  if (existing) {
+    await db
+      .update(contaAzulConnection)
+      .set(data)
+      .where(eq(contaAzulConnection.id, existing.id));
+    return;
+  }
+
+  await db.insert(contaAzulConnection).values(data);
 }
 
 export async function getActiveConnection() {
@@ -102,7 +102,11 @@ export async function getConnectionStatus() {
   const db = await getDb();
   if (!db) return { connected: false, lastSyncAt: null };
 
-  const [conn] = await db.select().from(contaAzulConnection).limit(1);
+  const [conn] = await db
+    .select()
+    .from(contaAzulConnection)
+    .orderBy(desc(contaAzulConnection.id))
+    .limit(1);
   if (!conn) return { connected: false, lastSyncAt: null };
 
   return {
