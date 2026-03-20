@@ -1532,7 +1532,7 @@ export default function DreGerencial() {
 
       {/* Mappings Dialog */}
       <Dialog open={showMappings} onOpenChange={setShowMappings}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings2 className="h-5 w-5" />
@@ -1573,7 +1573,7 @@ export default function DreGerencial() {
                       className="flex items-center justify-between gap-2 p-2 bg-background rounded border"
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
+                        <p className="text-sm font-medium break-words">
                           {item.name}
                         </p>
                         {item.entradaDre && (
@@ -1592,7 +1592,7 @@ export default function DreGerencial() {
                           })
                         }
                       >
-                        <SelectTrigger className="w-52 h-8 text-xs">
+                        <SelectTrigger className="w-64 h-8 text-xs">
                           <SelectValue placeholder="Selecionar grupo..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -1649,7 +1649,7 @@ export default function DreGerencial() {
                               })
                             }
                           >
-                            <SelectTrigger className="w-52 h-8 text-xs">
+                            <SelectTrigger className="w-64 h-8 text-xs">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
