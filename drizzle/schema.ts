@@ -10,7 +10,9 @@ import {
   index,
   unique,
   double,
-  date
+  date,
+  json,
+  datetime,
 } from "drizzle-orm/mysql-core";
 
 /**
@@ -325,3 +327,118 @@ export const dreGerencialMensal = mysqlTable("dre_gerencial_mensal", {
 
 export type DreGerencialMensal = typeof dreGerencialMensal.$inferSelect;
 export type InsertDreGerencialMensal = typeof dreGerencialMensal.$inferInsert;
+
+// ============= CONTA AZUL INTEGRATION =============
+
+export const contaAzulConnection = mysqlTable("conta_azul_connection", {
+  id: int("id").autoincrement().primaryKey(),
+  status: mysqlEnum("status", ["connected", "disconnected", "error"]).notNull().default("disconnected"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: datetime("token_expires_at"),
+  externalCompanyId: varchar("external_company_id", { length: 255 }),
+  connectedAt: timestamp("connected_at"),
+  lastSyncAt: timestamp("last_sync_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ContaAzulConnection = typeof contaAzulConnection.$inferSelect;
+export type InsertContaAzulConnection = typeof contaAzulConnection.$inferInsert;
+
+export const contaAzulCategories = mysqlTable("conta_azul_categories", {
+  id: int("id").autoincrement().primaryKey(),
+  externalId: varchar("external_id", { length: 255 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }),
+  entradaDre: varchar("entrada_dre", { length: 100 }),
+  parentExternalId: varchar("parent_external_id", { length: 255 }),
+  rawPayload: json("raw_payload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  externalIdUnique: unique("ca_cat_external_id_unique").on(table.externalId),
+}));
+
+export type ContaAzulCategory = typeof contaAzulCategories.$inferSelect;
+
+export const contaAzulCostCenters = mysqlTable("conta_azul_cost_centers", {
+  id: int("id").autoincrement().primaryKey(),
+  externalId: varchar("external_id", { length: 255 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  code: varchar("code", { length: 100 }),
+  active: boolean("active").default(true),
+  rawPayload: json("raw_payload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  externalIdUnique: unique("ca_cc_external_id_unique").on(table.externalId),
+}));
+
+export type ContaAzulCostCenter = typeof contaAzulCostCenters.$inferSelect;
+
+export const contaAzulExpenses = mysqlTable("conta_azul_expenses", {
+  id: int("id").autoincrement().primaryKey(),
+  externalId: varchar("external_id", { length: 255 }).notNull(),
+  competencia: varchar("competencia", { length: 7 }).notNull(),
+  dueDate: date("due_date"),
+  paymentDate: date("payment_date"),
+  description: text("description"),
+  amount: decimal("amount", { precision: 14, scale: 2 }).notNull().default("0"),
+  status: varchar("status", { length: 50 }),
+  categoryExternalId: varchar("category_external_id", { length: 255 }),
+  categoryName: varchar("category_name", { length: 255 }),
+  costCenterExternalId: varchar("cost_center_external_id", { length: 255 }),
+  costCenterName: varchar("cost_center_name", { length: 255 }),
+  rawPayload: json("raw_payload"),
+  importedAt: timestamp("imported_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  externalIdUnique: unique("ca_exp_external_id_unique").on(table.externalId),
+  competenciaIdx: index("ca_exp_competencia_idx").on(table.competencia),
+}));
+
+export type ContaAzulExpense = typeof contaAzulExpenses.$inferSelect;
+
+export const DRE_GROUPS = [
+  "deducoes_receita",
+  "custos_variaveis",
+  "despesas_pessoal",
+  "despesas_administrativas",
+  "despesas_comerciais",
+  "despesas_gerais",
+  "depreciacao_amortizacao",
+  "resultado_financeiro",
+  "ir_csll",
+  "ignorar",
+] as const;
+
+export type DreGroup = typeof DRE_GROUPS[number];
+
+export const dreAccountMappings = mysqlTable("dre_account_mappings", {
+  id: int("id").autoincrement().primaryKey(),
+  sourceType: mysqlEnum("source_type", ["conta_azul_category", "cost_center"]).notNull(),
+  sourceExternalId: varchar("source_external_id", { length: 255 }).notNull(),
+  sourceName: varchar("source_name", { length: 255 }).notNull(),
+  dreGroup: mysqlEnum("dre_group", [
+    "deducoes_receita",
+    "custos_variaveis",
+    "despesas_pessoal",
+    "despesas_administrativas",
+    "despesas_comerciais",
+    "despesas_gerais",
+    "depreciacao_amortizacao",
+    "resultado_financeiro",
+    "ir_csll",
+    "ignorar",
+  ]).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  sourceUnique: unique("dre_map_source_unique").on(table.sourceType, table.sourceExternalId),
+}));
+
+export type DreAccountMapping = typeof dreAccountMappings.$inferSelect;
+export type InsertDreAccountMapping = typeof dreAccountMappings.$inferInsert;

@@ -14,6 +14,9 @@ import {
   importLogs,
   alertas,
   dreGerencialMensal,
+  dreAccountMappings,
+  contaAzulCategories,
+  contaAzulCostCenters,
   type Cliente,
   type Produto,
   type Estoque,
@@ -21,6 +24,7 @@ import {
   type Venda,
   type Alerta,
   type InsertDreGerencialMensal,
+  type InsertDreAccountMapping,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1291,4 +1295,62 @@ export async function getFaturamentoMensalMap(): Promise<Record<string, number>>
     if (r.mes) map[r.mes] = Number(r.total);
   }
   return map;
+}
+
+// ============= DRE ACCOUNT MAPPINGS =============
+
+export async function listDreMappings() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(dreAccountMappings).orderBy(dreAccountMappings.sourceName);
+}
+
+export async function upsertDreMapping(data: Omit<InsertDreAccountMapping, "id" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [existing] = await db.select().from(dreAccountMappings).where(
+    and(
+      eq(dreAccountMappings.sourceType, data.sourceType),
+      eq(dreAccountMappings.sourceExternalId, data.sourceExternalId),
+    )
+  );
+
+  if (existing) {
+    await db.update(dreAccountMappings).set({
+      sourceName: data.sourceName,
+      dreGroup: data.dreGroup,
+      notes: data.notes,
+    }).where(eq(dreAccountMappings.id, existing.id));
+    const [updated] = await db.select().from(dreAccountMappings).where(eq(dreAccountMappings.id, existing.id));
+    return updated;
+  }
+
+  await db.insert(dreAccountMappings).values(data);
+  const [row] = await db.select().from(dreAccountMappings).where(
+    and(
+      eq(dreAccountMappings.sourceType, data.sourceType),
+      eq(dreAccountMappings.sourceExternalId, data.sourceExternalId),
+    )
+  );
+  return row;
+}
+
+export async function deleteDreMapping(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(dreAccountMappings).where(eq(dreAccountMappings.id, id));
+  return { success: true };
+}
+
+export async function listContaAzulCategories() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(contaAzulCategories).orderBy(contaAzulCategories.name);
+}
+
+export async function listContaAzulCostCenters() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(contaAzulCostCenters).orderBy(contaAzulCostCenters.name);
 }

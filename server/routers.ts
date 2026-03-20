@@ -55,9 +55,17 @@ import {
   deleteDreGerencial,
   getFaturamentoByCompetencia,
   getFaturamentoMensalMap,
+  listDreMappings,
+  upsertDreMapping,
+  deleteDreMapping,
+  listContaAzulCategories,
+  listContaAzulCostCenters,
 } from "./db";
 import { calcularDre } from "../shared/dreCalculations";
 import { notifyOwner } from "./_core/notification";
+import { getAuthorizationUrl, getConnectionStatus, disconnect as disconnectContaAzul } from "./integrations/contaAzulAuth";
+import { syncAllMasterData, syncExpensesByCompetencia, autoMapCategories } from "./integrations/contaAzulSync";
+import { consolidarDreImportado, getUnmappedItems } from "./integrations/dreConsolidation";
 
 export const appRouter = router({
   system: systemRouter,
@@ -500,6 +508,95 @@ export const appRouter = router({
         });
         return { competencia: r.competencia, id: r.id, ...dre };
       });
+    }),
+  }),
+
+  // ============= CONTA AZUL INTEGRATION =============
+  contaAzul: router({
+    getConnectUrl: publicProcedure.query(() => {
+      return { url: getAuthorizationUrl() };
+    }),
+
+    getStatus: publicProcedure.query(async () => {
+      return await getConnectionStatus();
+    }),
+
+    disconnect: publicProcedure.mutation(async () => {
+      await disconnectContaAzul();
+      return { success: true };
+    }),
+
+    syncMasterData: publicProcedure.mutation(async () => {
+      return await syncAllMasterData();
+    }),
+
+    syncExpenses: publicProcedure
+      .input(z.object({
+        competencia: z.string().regex(/^\d{4}-\d{2}$/, "Formato deve ser YYYY-MM"),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await syncExpensesByCompetencia(input.competencia);
+        return result;
+      }),
+
+    getImportPreview: publicProcedure
+      .input(z.object({
+        competencia: z.string().regex(/^\d{4}-\d{2}$/, "Formato deve ser YYYY-MM"),
+      }))
+      .query(async ({ input }) => {
+        return await consolidarDreImportado(input.competencia);
+      }),
+
+    getUnmappedItems: publicProcedure.query(async () => {
+      return await getUnmappedItems();
+    }),
+
+    getCategories: publicProcedure.query(async () => {
+      return await listContaAzulCategories();
+    }),
+
+    getCostCenters: publicProcedure.query(async () => {
+      return await listContaAzulCostCenters();
+    }),
+  }),
+
+  // ============= DRE ACCOUNT MAPPINGS =============
+  dreMappings: router({
+    list: publicProcedure.query(async () => {
+      return await listDreMappings();
+    }),
+
+    upsert: publicProcedure
+      .input(z.object({
+        sourceType: z.enum(["conta_azul_category", "cost_center"]),
+        sourceExternalId: z.string(),
+        sourceName: z.string(),
+        dreGroup: z.enum([
+          "deducoes_receita",
+          "custos_variaveis",
+          "despesas_pessoal",
+          "despesas_administrativas",
+          "despesas_comerciais",
+          "despesas_gerais",
+          "depreciacao_amortizacao",
+          "resultado_financeiro",
+          "ir_csll",
+          "ignorar",
+        ]),
+        notes: z.string().nullable().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await upsertDreMapping(input);
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await deleteDreMapping(input.id);
+      }),
+
+    autoMap: publicProcedure.mutation(async () => {
+      return await autoMapCategories();
     }),
   }),
 });

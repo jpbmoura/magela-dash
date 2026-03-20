@@ -31,6 +31,12 @@ import {
   Legend,
 } from "recharts";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   FileSpreadsheet,
   Save,
   Plus,
@@ -42,6 +48,14 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Pencil,
+  Link2,
+  Unlink,
+  RefreshCw,
+  Download,
+  CheckCircle2,
+  AlertTriangle,
+  Settings2,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -125,6 +139,19 @@ const EMPTY_FORM: FormState = {
   irCsll: "",
   observacoes: "",
 };
+
+const DRE_GROUP_OPTIONS = [
+  { value: "deducoes_receita", label: "Deduções da Receita" },
+  { value: "custos_variaveis", label: "Custos Variáveis" },
+  { value: "despesas_pessoal", label: "Despesas com Pessoal" },
+  { value: "despesas_administrativas", label: "Despesas Administrativas" },
+  { value: "despesas_comerciais", label: "Despesas Comerciais" },
+  { value: "despesas_gerais", label: "Despesas Gerais" },
+  { value: "depreciacao_amortizacao", label: "Depreciação e Amortização" },
+  { value: "resultado_financeiro", label: "Resultado Financeiro" },
+  { value: "ir_csll", label: "IR/CSLL" },
+  { value: "ignorar", label: "Ignorar" },
+];
 
 const ChartTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -268,6 +295,23 @@ export default function DreGerencial() {
 
   const utils = trpc.useUtils();
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+    if (connected === "true") {
+      toast.success("Conta Azul conectada com sucesso!");
+      utils.contaAzul.invalidate();
+    } else if (error === "no_code") {
+      toast.error("Falha na autorização: código não recebido do Conta Azul.");
+    } else if (error === "auth_failed") {
+      toast.error("Falha ao conectar com o Conta Azul. Tente novamente.");
+    }
+    if (connected || error) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const { data: dreList, isLoading: loadingList } = trpc.dre.list.useQuery();
   const { data: dreData, isLoading: loadingDre } =
     trpc.dre.getByCompetencia.useQuery(
@@ -276,6 +320,119 @@ export default function DreGerencial() {
     );
   const { data: resumoData, isLoading: loadingResumo } =
     trpc.dre.getResumo.useQuery();
+
+  // Conta Azul integration
+  const { data: caStatus } = trpc.contaAzul.getStatus.useQuery();
+  const isConnected = caStatus?.connected === true;
+
+  const [showMappings, setShowMappings] = useState(false);
+  const [importPreview, setImportPreview] = useState<any>(null);
+
+  const connectUrlQuery = trpc.contaAzul.getConnectUrl.useQuery(undefined, {
+    enabled: false,
+  });
+
+  const disconnectMutation = trpc.contaAzul.disconnect.useMutation({
+    onSuccess: () => {
+      toast.success("Conta Azul desconectada");
+      utils.contaAzul.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const syncMasterMutation = trpc.contaAzul.syncMasterData.useMutation({
+    onSuccess: (data) => {
+      toast.success(
+        `Sincronizado: ${data.categories} categorias, ${data.costCenters} centros de custo, ${data.autoMapped} mapeados`
+      );
+      utils.contaAzul.invalidate();
+      utils.dreMappings.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const syncExpensesMutation = trpc.contaAzul.syncExpenses.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.synced} despesas sincronizadas`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const importPreviewQuery = trpc.contaAzul.getImportPreview.useQuery(
+    { competencia: isCreating ? newCompetencia : selectedCompetencia },
+    { enabled: false }
+  );
+
+  const { data: mappingsList } = trpc.dreMappings.list.useQuery(undefined, {
+    enabled: showMappings,
+  });
+
+  const { data: unmappedItems } = trpc.contaAzul.getUnmappedItems.useQuery(
+    undefined,
+    { enabled: showMappings }
+  );
+
+  const { data: caCategories } = trpc.contaAzul.getCategories.useQuery(
+    undefined,
+    { enabled: showMappings }
+  );
+
+  const upsertMappingMutation = trpc.dreMappings.upsert.useMutation({
+    onSuccess: () => {
+      utils.dreMappings.invalidate();
+      utils.contaAzul.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const deleteMappingMutation = trpc.dreMappings.delete.useMutation({
+    onSuccess: () => {
+      utils.dreMappings.invalidate();
+      utils.contaAzul.invalidate();
+    },
+  });
+
+  const autoMapMutation = trpc.dreMappings.autoMap.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.mapped} categorias mapeadas automaticamente`);
+      utils.dreMappings.invalidate();
+      utils.contaAzul.invalidate();
+    },
+  });
+
+  const handleConnect = async () => {
+    const result = await connectUrlQuery.refetch();
+    if (result.data?.url) {
+      window.location.href = result.data.url;
+    }
+  };
+
+  const handleImportPreview = async () => {
+    const comp = isCreating ? newCompetencia : selectedCompetencia;
+    await syncExpensesMutation.mutateAsync({ competencia: comp });
+    const result = await importPreviewQuery.refetch();
+    if (result.data) {
+      setImportPreview(result.data);
+    }
+  };
+
+  const handleApplyImport = () => {
+    if (!importPreview) return;
+    setForm((prev) => ({
+      ...prev,
+      deducoesReceita: String(importPreview.deducoes_receita || 0),
+      custosVariaveis: String(importPreview.custos_variaveis || 0),
+      despesasPessoal: String(importPreview.despesas_pessoal || 0),
+      despesasAdministrativas: String(importPreview.despesas_administrativas || 0),
+      despesasComerciais: String(importPreview.despesas_comerciais || 0),
+      despesasGerais: String(importPreview.despesas_gerais || 0),
+      depreciacaoAmortizacao: String(importPreview.depreciacao_amortizacao || 0),
+      resultadoFinanceiro: String(importPreview.resultado_financeiro || 0),
+      irCsll: String(importPreview.ir_csll || 0),
+    }));
+    setImportPreview(null);
+    toast.success("Valores importados aplicados ao formulário");
+  };
 
   const createMutation = trpc.dre.create.useMutation({
     onSuccess: () => {
@@ -505,6 +662,83 @@ export default function DreGerencial() {
           Novo Mês
         </Button>
       </PageHeader>
+
+      {/* Conta Azul Integration Status */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div
+              className={`h-8 w-8 rounded-lg flex items-center justify-center ${isConnected ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}
+            >
+              {isConnected ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <Link2 className="h-4 w-4" />
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-medium">
+                Conta Azul{" "}
+                <Badge
+                  variant={isConnected ? "default" : "secondary"}
+                  className="ml-1.5 text-[10px] h-4 px-1.5"
+                >
+                  {isConnected ? "Conectado" : "Desconectado"}
+                </Badge>
+              </p>
+              {isConnected && caStatus?.lastSyncAt && (
+                <p className="text-xs text-muted-foreground">
+                  Última sync:{" "}
+                  {new Date(caStatus.lastSyncAt).toLocaleString("pt-BR")}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {isConnected ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => syncMasterMutation.mutate()}
+                  disabled={syncMasterMutation.isPending}
+                >
+                  {syncMasterMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Sincronizar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowMappings(true)}
+                >
+                  <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                  Mapeamentos
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm("Deseja desconectar o Conta Azul?"))
+                      disconnectMutation.mutate();
+                  }}
+                >
+                  <Unlink className="h-3.5 w-3.5 mr-1.5" />
+                  Desconectar
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={handleConnect}>
+                <Link2 className="h-3.5 w-3.5 mr-1.5" />
+                Conectar Conta Azul
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <Tabs defaultValue="cadastro" className="space-y-4">
         <TabsList>
@@ -906,6 +1140,153 @@ export default function DreGerencial() {
             </Card>
           </div>
 
+          {/* Conta Azul Import Panel */}
+          {isConnected && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Download className="h-4 w-4" />
+                    Importar do Conta Azul
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleImportPreview}
+                    disabled={
+                      syncExpensesMutation.isPending ||
+                      importPreviewQuery.isFetching
+                    }
+                  >
+                    {syncExpensesMutation.isPending ||
+                    importPreviewQuery.isFetching ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Buscar despesas de{" "}
+                    {isCreating ? newCompetencia : selectedCompetencia}
+                  </Button>
+                </div>
+              </CardHeader>
+              {importPreview && (
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div className="p-3 rounded-lg bg-muted/30 border">
+                      <p className="text-muted-foreground text-xs">
+                        Total de despesas
+                      </p>
+                      <p className="font-bold text-lg">
+                        {importPreview.meta.totalExpenses}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                      <p className="text-muted-foreground text-xs">
+                        Com mapeamento
+                      </p>
+                      <p className="font-bold text-lg text-emerald-600">
+                        {importPreview.meta.mappedExpenses}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                      <p className="text-muted-foreground text-xs">
+                        Sem mapeamento
+                      </p>
+                      <p className="font-bold text-lg text-amber-600">
+                        {importPreview.meta.unmappedExpenses}
+                      </p>
+                    </div>
+                  </div>
+
+                  {importPreview.meta.unmappedCategories.length > 0 && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-sm">
+                      <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium text-amber-700">
+                          Categorias sem mapeamento:
+                        </p>
+                        <p className="text-muted-foreground text-xs mt-1">
+                          {importPreview.meta.unmappedCategories.join(", ")}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="link"
+                          className="h-auto p-0 text-xs mt-1"
+                          onClick={() => setShowMappings(true)}
+                        >
+                          Configurar mapeamentos
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                            Grupo DRE
+                          </th>
+                          <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                            Valor Importado
+                          </th>
+                          <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                            Valor Atual
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { key: "deducoes_receita", label: "Deduções da Receita", formKey: "deducoesReceita" },
+                          { key: "custos_variaveis", label: "Custos Variáveis", formKey: "custosVariaveis" },
+                          { key: "despesas_pessoal", label: "Despesas com Pessoal", formKey: "despesasPessoal" },
+                          { key: "despesas_administrativas", label: "Despesas Administrativas", formKey: "despesasAdministrativas" },
+                          { key: "despesas_comerciais", label: "Despesas Comerciais", formKey: "despesasComerciais" },
+                          { key: "despesas_gerais", label: "Despesas Gerais", formKey: "despesasGerais" },
+                          { key: "depreciacao_amortizacao", label: "Depreciação e Amortização", formKey: "depreciacaoAmortizacao" },
+                          { key: "resultado_financeiro", label: "Resultado Financeiro", formKey: "resultadoFinanceiro" },
+                          { key: "ir_csll", label: "IR/CSLL", formKey: "irCsll" },
+                        ].map(({ key, label, formKey }) => {
+                          const imported = importPreview[key] || 0;
+                          const current = toNum((form as any)[formKey]);
+                          const diff = imported !== current;
+                          return (
+                            <tr
+                              key={key}
+                              className={`border-b border-border/30 ${diff ? "bg-amber-500/5" : ""}`}
+                            >
+                              <td className="px-3 py-2">{label}</td>
+                              <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                {formatCurrency(imported)}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                                {formatCurrency(current)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setImportPreview(null)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button size="sm" onClick={handleApplyImport}>
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
+                      Aplicar sugestões ao formulário
+                    </Button>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          )}
+
           {/* Composição de Despesas */}
           <Card>
             <CardHeader className="pb-3">
@@ -1148,6 +1529,173 @@ export default function DreGerencial() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Mappings Dialog */}
+      <Dialog open={showMappings} onOpenChange={setShowMappings}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5" />
+              Mapeamento de Categorias Conta Azul → DRE
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Associe cada categoria do Conta Azul a um grupo do DRE gerencial.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => autoMapMutation.mutate()}
+                disabled={autoMapMutation.isPending}
+              >
+                {autoMapMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Auto-mapear
+              </Button>
+            </div>
+
+            {unmappedItems && unmappedItems.length > 0 && (
+              <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                <p className="text-sm font-medium text-amber-700 mb-2">
+                  <AlertTriangle className="h-4 w-4 inline mr-1" />
+                  {unmappedItems.length} categorias sem mapeamento
+                </p>
+                <div className="space-y-2">
+                  {unmappedItems.map((item) => (
+                    <div
+                      key={item.externalId}
+                      className="flex items-center justify-between gap-2 p-2 bg-background rounded border"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {item.name}
+                        </p>
+                        {item.entradaDre && (
+                          <p className="text-xs text-muted-foreground">
+                            entrada_dre: {item.entradaDre}
+                          </p>
+                        )}
+                      </div>
+                      <Select
+                        onValueChange={(dreGroup) =>
+                          upsertMappingMutation.mutate({
+                            sourceType: "conta_azul_category",
+                            sourceExternalId: item.externalId,
+                            sourceName: item.name,
+                            dreGroup: dreGroup as any,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-52 h-8 text-xs">
+                          <SelectValue placeholder="Selecionar grupo..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DRE_GROUP_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {mappingsList && mappingsList.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                        Categoria
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                        Grupo DRE
+                      </th>
+                      <th className="px-3 py-2 w-10" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mappingsList.map((m) => (
+                      <tr
+                        key={m.id}
+                        className="border-b border-border/30"
+                      >
+                        <td className="px-3 py-2">
+                          <p className="font-medium">{m.sourceName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {m.sourceType === "conta_azul_category"
+                              ? "Categoria"
+                              : "Centro de Custo"}
+                          </p>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Select
+                            value={m.dreGroup}
+                            onValueChange={(dreGroup) =>
+                              upsertMappingMutation.mutate({
+                                sourceType: m.sourceType as any,
+                                sourceExternalId: m.sourceExternalId,
+                                sourceName: m.sourceName,
+                                dreGroup: dreGroup as any,
+                              })
+                            }
+                          >
+                            <SelectTrigger className="w-52 h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DRE_GROUP_OPTIONS.map((opt) => (
+                                <SelectItem
+                                  key={opt.value}
+                                  value={opt.value}
+                                >
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() =>
+                              deleteMappingMutation.mutate({ id: m.id })
+                            }
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {(!mappingsList || mappingsList.length === 0) &&
+              (!unmappedItems || unmappedItems.length === 0) && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  <Settings2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p>Nenhum mapeamento encontrado.</p>
+                  <p className="text-xs mt-1">
+                    Sincronize as categorias do Conta Azul primeiro.
+                  </p>
+                </div>
+              )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

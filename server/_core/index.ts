@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { exchangeCodeForToken, saveConnection } from "../integrations/contaAzulAuth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -32,7 +33,28 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
+  // Conta Azul OAuth callback
+  app.get("/api/integrations/conta-azul/callback", async (req, res) => {
+    try {
+      const code = req.query.code as string;
+      if (!code) {
+        res.redirect("/dre-gerencial?error=no_code");
+        return;
+      }
+      const tokens = await exchangeCodeForToken(code);
+      await saveConnection({
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresIn: tokens.expires_in ?? 3600,
+      });
+      console.log("[ContaAzul] OAuth callback success");
+      res.redirect("/dre-gerencial?connected=true");
+    } catch (error) {
+      console.error("[ContaAzul] OAuth callback error:", error);
+      res.redirect("/dre-gerencial?error=auth_failed");
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
