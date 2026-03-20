@@ -398,7 +398,17 @@ export default function DreGerencial() {
 
   const autoMapMutation = trpc.dreMappings.autoMap.useMutation({
     onSuccess: data => {
-      toast.success(`${data.mapped} categorias mapeadas automaticamente`);
+      if (data.mapped > 0) {
+        toast.success(
+          `Auto-mapeamento concluído: ${data.mapped} categorias associadas automaticamente. ${data.pending} categorias seguem pendentes para revisão manual.`,
+        );
+      } else {
+        toast.info(
+          data.pending > 0
+            ? `Nenhuma categoria pôde ser mapeada automaticamente. ${data.pending} categorias seguem pendentes para revisão manual.`
+            : "Todas as categorias já estão mapeadas.",
+        );
+      }
       utils.dreMappings.invalidate();
       utils.contaAzul.invalidate();
     },

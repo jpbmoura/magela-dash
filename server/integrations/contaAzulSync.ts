@@ -23,6 +23,92 @@ const ENTRADA_DRE_MAP: Record<string, string> = {
   IMPOSTOS_SOBRE_O_LUCRO: "ir_csll",
 };
 
+// --------------- Auto-mapping helpers ---------------
+
+function normalizeString(str: string): string {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[-_/\\]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const KEYWORD_MAP: Record<string, string[]> = {
+  despesas_pessoal: [
+    "decimo terceiro", "13o salario", "adicional noturno",
+    "vale transporte", "vale refeicao", "plano de saude",
+    "convenio medico", "ajuda de custo", "pro labore",
+    "salario", "salarios", "folha", "encargos", "inss", "fgts",
+    "ferias", "13o", "13º", "rescisao", "periculosidade",
+    "insalubridade", "dsr",
+  ],
+  despesas_comerciais: [
+    "google ads", "meta ads", "facebook ads",
+    "comissao", "vendas", "vendedor", "representante",
+    "marketing", "trafego", "comercial", "prospeccao",
+    "publicidade", "propaganda",
+  ],
+  despesas_administrativas: [
+    "material de escritorio", "aluguel de imoveis",
+    "aluguel", "alugueis", "agua", "esgoto", "energia", "luz",
+    "internet", "telefone", "contador", "contabilidade",
+    "assessoria", "consultoria", "honorarios", "sistema",
+    "software", "licenca", "cartorio", "correios", "limpeza",
+    "manutencao",
+  ],
+  despesas_gerais: [
+    "despesas gerais",
+    "combustivel", "veiculo", "veiculos", "frete", "viagens",
+    "hospedagem", "refeicao", "uniformes", "epi", "ferramentas",
+  ],
+  depreciacao_amortizacao: [
+    "depreciacao", "amortizacao",
+  ],
+  resultado_financeiro: [
+    "rendimento financeiro", "tarifa bancaria", "despesa bancaria",
+    "receita financeira", "despesa financeira",
+    "juros", "multa", "rendimento", "iof",
+  ],
+  ir_csll: [
+    "imposto de renda", "imposto sobre lucro",
+    "irpj", "csll",
+  ],
+  custos_variaveis: [
+    "custo de mercadoria", "custo mercadoria", "custo do produto",
+    "custo produto", "custo direto", "custo variavel",
+    "taxa de cartao", "taxa marketplace", "comissao gateway",
+    "materia prima",
+    "cmv", "insumos",
+  ],
+};
+
+function resolveByKeyword(name: string): string | null {
+  const normalized = normalizeString(name);
+  for (const [group, keywords] of Object.entries(KEYWORD_MAP)) {
+    for (const kw of keywords) {
+      if (normalized.includes(kw)) return group;
+    }
+  }
+  return null;
+}
+
+function resolveFromEntradaDreName(entradaDre: string | null): string | null {
+  if (!entradaDre) return null;
+  const normalized = normalizeString(entradaDre);
+  if (normalized.includes("despesas administrativas")) return "despesas_administrativas";
+  if (normalized.includes("despesas comerciais")) return "despesas_comerciais";
+  if (normalized.includes("despesas com pessoal") || normalized.includes("pessoal")) return "despesas_pessoal";
+  if (normalized.includes("receitas financeiras") || normalized.includes("despesas financeiras")) return "resultado_financeiro";
+  if (normalized.includes("depreciacao") || normalized.includes("amortizacao")) return "depreciacao_amortizacao";
+  if (normalized.includes("impostos sobre o lucro") || normalized.includes("imposto")) return "ir_csll";
+  if (normalized.includes("custo")) return "custos_variaveis";
+  if (normalized.includes("deducao")) return "deducoes_receita";
+  if (normalized.includes("outras despesas")) return "despesas_gerais";
+  return null;
+}
+
 export async function syncCategories(): Promise<{ synced: number }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -222,43 +308,70 @@ export async function syncExpensesByCompetencia(
   return { synced: totalSynced };
 }
 
-export async function autoMapCategories(): Promise<{ mapped: number }> {
+export async function autoMapCategories(): Promise<{ mapped: number; pending: number }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const categories = await db
-    .select()
-    .from(contaAzulCategories)
-    .where(sql`${contaAzulCategories.entradaDre} IS NOT NULL AND ${contaAzulCategories.entradaDre} != ''`);
+  const allCategories = await db.select().from(contaAzulCategories);
+  const existingMappings = await db
+    .select({ sourceExternalId: dreAccountMappings.sourceExternalId })
+    .from(dreAccountMappings)
+    .where(sql`${dreAccountMappings.sourceType} = 'conta_azul_category'`);
+
+  const mappedIds = new Set(existingMappings.map((m) => m.sourceExternalId));
+
+  const unmapped = allCategories.filter(
+    (c) => c.type === "DESPESA" && !mappedIds.has(c.externalId),
+  );
 
   let mapped = 0;
 
-  for (const cat of categories) {
-    const dreGroup =
-      ENTRADA_DRE_MAP[cat.entradaDre!] || null;
+  for (const cat of unmapped) {
+    let dreGroup: string | null = null;
+    let origin = "";
+
+    // CAMADA 1 — campo entrada_dre direto da API
+    if (cat.entradaDre) {
+      dreGroup = ENTRADA_DRE_MAP[cat.entradaDre] ?? null;
+      if (dreGroup) origin = "auto:api";
+    }
+
+    // CAMADA 2 — nome textual do entrada_dre + considera_custo_dre
+    if (!dreGroup) {
+      dreGroup = resolveFromEntradaDreName(cat.entradaDre);
+      if (dreGroup) {
+        origin = "auto:dre_category";
+      } else {
+        const raw = cat.rawPayload as Record<string, any> | null;
+        if (raw?.considera_custo_dre === true && cat.type === "DESPESA") {
+          dreGroup = "custos_variaveis";
+          origin = "auto:dre_category";
+        }
+      }
+    }
+
+    // CAMADA 3 — palavras-chave no nome da categoria
+    if (!dreGroup) {
+      dreGroup = resolveByKeyword(cat.name);
+      if (dreGroup) origin = "auto:keyword";
+    }
+
+    // CAMADA 4 — não mapear se houver dúvida
     if (!dreGroup) continue;
-
-    const existing = await db
-      .select()
-      .from(dreAccountMappings)
-      .where(
-        sql`${dreAccountMappings.sourceType} = 'conta_azul_category' AND ${dreAccountMappings.sourceExternalId} = ${cat.externalId}`
-      )
-      .limit(1);
-
-    if (existing.length > 0) continue;
 
     await db.insert(dreAccountMappings).values({
       sourceType: "conta_azul_category",
       sourceExternalId: cat.externalId,
       sourceName: cat.name,
       dreGroup: dreGroup as any,
+      notes: origin,
     });
     mapped++;
   }
 
-  console.log(`[ContaAzul] Auto-mapped ${mapped} categories`);
-  return { mapped };
+  const pending = unmapped.length - mapped;
+  console.log(`[ContaAzul] Auto-mapped ${mapped} categories, ${pending} still pending`);
+  return { mapped, pending };
 }
 
 export async function syncAllMasterData() {
