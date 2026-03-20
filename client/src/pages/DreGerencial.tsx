@@ -1,7 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { calcularDre, type DreCompleto } from "../../../shared/dreCalculations";
-import { formatCurrency, formatCurrencyShort, formatPercent } from "@/lib/format";
+import {
+  formatCurrency,
+  formatCurrencyShort,
+  formatPercent,
+} from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -101,7 +105,7 @@ function MoneyInput({
           step="0.01"
           className="pl-9 h-9 text-sm tabular-nums"
           value={value}
-          onChange={(e) => onChange?.(e.target.value)}
+          onChange={e => onChange?.(e.target.value)}
           readOnly={readOnly}
           disabled={readOnly}
         />
@@ -337,25 +341,25 @@ export default function DreGerencial() {
       toast.success("Conta Azul desconectada");
       utils.contaAzul.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   const syncMasterMutation = trpc.contaAzul.syncMasterData.useMutation({
-    onSuccess: (data) => {
+    onSuccess: data => {
       toast.success(
         `Sincronizado: ${data.categories} categorias, ${data.costCenters} centros de custo, ${data.autoMapped} mapeados`
       );
       utils.contaAzul.invalidate();
       utils.dreMappings.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   const syncExpensesMutation = trpc.contaAzul.syncExpenses.useMutation({
-    onSuccess: (data) => {
+    onSuccess: data => {
       toast.success(`${data.synced} despesas sincronizadas`);
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   const importPreviewQuery = trpc.contaAzul.getImportPreview.useQuery(
@@ -382,7 +386,7 @@ export default function DreGerencial() {
       utils.dreMappings.invalidate();
       utils.contaAzul.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   const deleteMappingMutation = trpc.dreMappings.delete.useMutation({
@@ -393,7 +397,7 @@ export default function DreGerencial() {
   });
 
   const autoMapMutation = trpc.dreMappings.autoMap.useMutation({
-    onSuccess: (data) => {
+    onSuccess: data => {
       toast.success(`${data.mapped} categorias mapeadas automaticamente`);
       utils.dreMappings.invalidate();
       utils.contaAzul.invalidate();
@@ -418,15 +422,19 @@ export default function DreGerencial() {
 
   const handleApplyImport = () => {
     if (!importPreview) return;
-    setForm((prev) => ({
+    setForm(prev => ({
       ...prev,
       deducoesReceita: String(importPreview.deducoes_receita || 0),
       custosVariaveis: String(importPreview.custos_variaveis || 0),
       despesasPessoal: String(importPreview.despesas_pessoal || 0),
-      despesasAdministrativas: String(importPreview.despesas_administrativas || 0),
+      despesasAdministrativas: String(
+        importPreview.despesas_administrativas || 0
+      ),
       despesasComerciais: String(importPreview.despesas_comerciais || 0),
       despesasGerais: String(importPreview.despesas_gerais || 0),
-      depreciacaoAmortizacao: String(importPreview.depreciacao_amortizacao || 0),
+      depreciacaoAmortizacao: String(
+        importPreview.depreciacao_amortizacao || 0
+      ),
       resultadoFinanceiro: String(importPreview.resultado_financeiro || 0),
       irCsll: String(importPreview.ir_csll || 0),
     }));
@@ -440,7 +448,7 @@ export default function DreGerencial() {
       setIsCreating(false);
       utils.dre.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   const updateMutation = trpc.dre.update.useMutation({
@@ -449,7 +457,7 @@ export default function DreGerencial() {
       setEditingId(null);
       utils.dre.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   const deleteMutation = trpc.dre.delete.useMutation({
@@ -458,7 +466,7 @@ export default function DreGerencial() {
       setEditingId(null);
       utils.dre.invalidate();
     },
-    onError: (err) => toast.error(err.message),
+    onError: err => toast.error(err.message),
   });
 
   useEffect(() => {
@@ -492,9 +500,10 @@ export default function DreGerencial() {
 
   const faturamento = dreData?.faturamento ?? 0;
 
-  const receitaBruta = form.useManualReceita && form.receitaBrutaManual
-    ? toNum(form.receitaBrutaManual)
-    : faturamento;
+  const receitaBruta =
+    form.useManualReceita && form.receitaBrutaManual
+      ? toNum(form.receitaBrutaManual)
+      : faturamento;
 
   const dre: DreCompleto = useMemo(
     () =>
@@ -514,7 +523,7 @@ export default function DreGerencial() {
   );
 
   const updateField = (field: keyof FormState, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm(prev => ({ ...prev, [field]: value }));
 
   const handleSave = () => {
     const payload = {
@@ -553,7 +562,7 @@ export default function DreGerencial() {
 
   const competencias = useMemo(() => {
     if (!dreList) return [];
-    return dreList.map((d) => d.competencia);
+    return dreList.map(d => d.competencia);
   }, [dreList]);
 
   useEffect(() => {
@@ -574,7 +583,7 @@ export default function DreGerencial() {
     if (!resumoData) return [];
     return [...resumoData]
       .sort((a, b) => a.competencia.localeCompare(b.competencia))
-      .map((r) => ({
+      .map(r => ({
         mes: r.competencia,
         "Receita Líquida": r.receitaLiquida,
         EBITDA: r.ebitda,
@@ -586,7 +595,7 @@ export default function DreGerencial() {
     if (!resumoData) return [];
     return [...resumoData]
       .sort((a, b) => a.competencia.localeCompare(b.competencia))
-      .map((r) => ({
+      .map(r => ({
         mes: r.competencia,
         "Margem EBITDA": r.margemEbitda,
         "Margem Líquida": r.margemLiquida,
@@ -635,7 +644,7 @@ export default function DreGerencial() {
         {!isCreating && (
           <Select
             value={selectedCompetencia}
-            onValueChange={(v) => {
+            onValueChange={v => {
               setSelectedCompetencia(v);
               setIsCreating(false);
             }}
@@ -644,7 +653,7 @@ export default function DreGerencial() {
               <SelectValue placeholder="Competência" />
             </SelectTrigger>
             <SelectContent>
-              {competencias.map((c) => (
+              {competencias.map(c => (
                 <SelectItem key={c} value={c}>
                   {c}
                 </SelectItem>
@@ -757,20 +766,14 @@ export default function DreGerencial() {
           {isCreating && (
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <Label className="text-sm font-medium">
-                  Nova competência:
-                </Label>
+                <Label className="text-sm font-medium">Nova competência:</Label>
                 <Input
                   type="month"
                   className="w-44 h-9"
                   value={newCompetencia}
-                  onChange={(e) => setNewCompetencia(e.target.value)}
+                  onChange={e => setNewCompetencia(e.target.value)}
                 />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleCancelNew}
-                >
+                <Button size="sm" variant="ghost" onClick={handleCancelNew}>
                   Cancelar
                 </Button>
               </div>
@@ -852,17 +855,15 @@ export default function DreGerencial() {
                 {/* Receita Bruta */}
                 <div className="space-y-2 p-3 rounded-lg bg-muted/30 border border-border/50">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium">
-                      Receita Bruta
-                    </Label>
+                    <Label className="text-xs font-medium">Receita Bruta</Label>
                     <div className="flex items-center gap-2">
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
                           className="rounded"
                           checked={form.useManualReceita}
-                          onChange={(e) =>
-                            setForm((prev) => ({
+                          onChange={e =>
+                            setForm(prev => ({
                               ...prev,
                               useManualReceita: e.target.checked,
                             }))
@@ -879,7 +880,7 @@ export default function DreGerencial() {
                     <MoneyInput
                       label="Valor manual"
                       value={form.receitaBrutaManual}
-                      onChange={(v) => updateField("receitaBrutaManual", v)}
+                      onChange={v => updateField("receitaBrutaManual", v)}
                     />
                   ) : (
                     <div className="flex items-center gap-2">
@@ -900,51 +901,47 @@ export default function DreGerencial() {
                   <MoneyInput
                     label="(-) Deduções da Receita"
                     value={form.deducoesReceita}
-                    onChange={(v) => updateField("deducoesReceita", v)}
+                    onChange={v => updateField("deducoesReceita", v)}
                   />
                   <MoneyInput
                     label="(-) Custos Variáveis"
                     value={form.custosVariaveis}
-                    onChange={(v) => updateField("custosVariaveis", v)}
+                    onChange={v => updateField("custosVariaveis", v)}
                   />
                   <MoneyInput
                     label="(-) Despesas com Pessoal"
                     value={form.despesasPessoal}
-                    onChange={(v) => updateField("despesasPessoal", v)}
+                    onChange={v => updateField("despesasPessoal", v)}
                   />
                   <MoneyInput
                     label="(-) Despesas Administrativas"
                     value={form.despesasAdministrativas}
-                    onChange={(v) =>
-                      updateField("despesasAdministrativas", v)
-                    }
+                    onChange={v => updateField("despesasAdministrativas", v)}
                   />
                   <MoneyInput
                     label="(-) Despesas Comerciais"
                     value={form.despesasComerciais}
-                    onChange={(v) => updateField("despesasComerciais", v)}
+                    onChange={v => updateField("despesasComerciais", v)}
                   />
                   <MoneyInput
                     label="(-) Despesas Gerais"
                     value={form.despesasGerais}
-                    onChange={(v) => updateField("despesasGerais", v)}
+                    onChange={v => updateField("despesasGerais", v)}
                   />
                   <MoneyInput
                     label="(-) Depreciação e Amortização"
                     value={form.depreciacaoAmortizacao}
-                    onChange={(v) =>
-                      updateField("depreciacaoAmortizacao", v)
-                    }
+                    onChange={v => updateField("depreciacaoAmortizacao", v)}
                   />
                   <MoneyInput
                     label="(+/-) Resultado Financeiro"
                     value={form.resultadoFinanceiro}
-                    onChange={(v) => updateField("resultadoFinanceiro", v)}
+                    onChange={v => updateField("resultadoFinanceiro", v)}
                   />
                   <MoneyInput
                     label="(-) IR/CSLL"
                     value={form.irCsll}
-                    onChange={(v) => updateField("irCsll", v)}
+                    onChange={v => updateField("irCsll", v)}
                   />
                 </div>
 
@@ -956,9 +953,7 @@ export default function DreGerencial() {
                     className="text-sm h-20 resize-none"
                     placeholder="Notas sobre o período..."
                     value={form.observacoes}
-                    onChange={(e) =>
-                      updateField("observacoes", e.target.value)
-                    }
+                    onChange={e => updateField("observacoes", e.target.value)}
                   />
                 </div>
 
@@ -1106,9 +1101,7 @@ export default function DreGerencial() {
                       label="(+/-) Resultado Financeiro"
                       value={dre.resultadoFinanceiro}
                       pct={
-                        pctBase
-                          ? (dre.resultadoFinanceiro / pctBase) * 100
-                          : 0
+                        pctBase ? (dre.resultadoFinanceiro / pctBase) * 100 : 0
                       }
                       type="item"
                     />
@@ -1116,9 +1109,7 @@ export default function DreGerencial() {
                       label="(=) Resultado Antes do IR/CSLL"
                       value={dre.resultadoAntesIrCsll}
                       pct={
-                        pctBase
-                          ? (dre.resultadoAntesIrCsll / pctBase) * 100
-                          : 0
+                        pctBase ? (dre.resultadoAntesIrCsll / pctBase) * 100 : 0
                       }
                       type="subtotal"
                     />
@@ -1237,15 +1228,51 @@ export default function DreGerencial() {
                       </thead>
                       <tbody>
                         {[
-                          { key: "deducoes_receita", label: "Deduções da Receita", formKey: "deducoesReceita" },
-                          { key: "custos_variaveis", label: "Custos Variáveis", formKey: "custosVariaveis" },
-                          { key: "despesas_pessoal", label: "Despesas com Pessoal", formKey: "despesasPessoal" },
-                          { key: "despesas_administrativas", label: "Despesas Administrativas", formKey: "despesasAdministrativas" },
-                          { key: "despesas_comerciais", label: "Despesas Comerciais", formKey: "despesasComerciais" },
-                          { key: "despesas_gerais", label: "Despesas Gerais", formKey: "despesasGerais" },
-                          { key: "depreciacao_amortizacao", label: "Depreciação e Amortização", formKey: "depreciacaoAmortizacao" },
-                          { key: "resultado_financeiro", label: "Resultado Financeiro", formKey: "resultadoFinanceiro" },
-                          { key: "ir_csll", label: "IR/CSLL", formKey: "irCsll" },
+                          {
+                            key: "deducoes_receita",
+                            label: "Deduções da Receita",
+                            formKey: "deducoesReceita",
+                          },
+                          {
+                            key: "custos_variaveis",
+                            label: "Custos Variáveis",
+                            formKey: "custosVariaveis",
+                          },
+                          {
+                            key: "despesas_pessoal",
+                            label: "Despesas com Pessoal",
+                            formKey: "despesasPessoal",
+                          },
+                          {
+                            key: "despesas_administrativas",
+                            label: "Despesas Administrativas",
+                            formKey: "despesasAdministrativas",
+                          },
+                          {
+                            key: "despesas_comerciais",
+                            label: "Despesas Comerciais",
+                            formKey: "despesasComerciais",
+                          },
+                          {
+                            key: "despesas_gerais",
+                            label: "Despesas Gerais",
+                            formKey: "despesasGerais",
+                          },
+                          {
+                            key: "depreciacao_amortizacao",
+                            label: "Depreciação e Amortização",
+                            formKey: "depreciacaoAmortizacao",
+                          },
+                          {
+                            key: "resultado_financeiro",
+                            label: "Resultado Financeiro",
+                            formKey: "resultadoFinanceiro",
+                          },
+                          {
+                            key: "ir_csll",
+                            label: "IR/CSLL",
+                            formKey: "irCsll",
+                          },
                         ].map(({ key, label, formKey }) => {
                           const imported = importPreview[key] || 0;
                           const current = toNum((form as any)[formKey]);
@@ -1303,7 +1330,11 @@ export default function DreGerencial() {
                       strokeDasharray="3 3"
                       className="stroke-border/50"
                     />
-                    <XAxis type="number" tickFormatter={(v) => formatCurrencyShort(v)} className="text-xs" />
+                    <XAxis
+                      type="number"
+                      tickFormatter={v => formatCurrencyShort(v)}
+                      className="text-xs"
+                    />
                     <YAxis
                       type="category"
                       dataKey="name"
@@ -1385,7 +1416,7 @@ export default function DreGerencial() {
                         </tr>
                       </thead>
                       <tbody>
-                        {historyTableData.map((r) => (
+                        {historyTableData.map(r => (
                           <tr
                             key={r.competencia}
                             className="border-b border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
@@ -1450,7 +1481,7 @@ export default function DreGerencial() {
                           />
                           <XAxis dataKey="mes" className="text-xs" />
                           <YAxis
-                            tickFormatter={(v) => formatCurrencyShort(v)}
+                            tickFormatter={v => formatCurrencyShort(v)}
                             className="text-xs"
                             width={80}
                           />
@@ -1499,7 +1530,7 @@ export default function DreGerencial() {
                           />
                           <XAxis dataKey="mes" className="text-xs" />
                           <YAxis
-                            tickFormatter={(v) => `${v.toFixed(0)}%`}
+                            tickFormatter={v => `${v.toFixed(0)}%`}
                             className="text-xs"
                             width={50}
                           />
@@ -1532,7 +1563,7 @@ export default function DreGerencial() {
 
       {/* Mappings Dialog */}
       <Dialog open={showMappings} onOpenChange={setShowMappings}>
-        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings2 className="h-5 w-5" />
@@ -1543,7 +1574,8 @@ export default function DreGerencial() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Associe cada categoria do Conta Azul a um grupo do DRE gerencial.
+                Associe cada categoria do Conta Azul a um grupo do DRE
+                gerencial.
               </p>
               <Button
                 size="sm"
@@ -1567,7 +1599,7 @@ export default function DreGerencial() {
                   {unmappedItems.length} categorias sem mapeamento
                 </p>
                 <div className="space-y-2">
-                  {unmappedItems.map((item) => (
+                  {unmappedItems.map(item => (
                     <div
                       key={item.externalId}
                       className="flex items-center justify-between gap-2 p-2 bg-background rounded border"
@@ -1583,7 +1615,7 @@ export default function DreGerencial() {
                         )}
                       </div>
                       <Select
-                        onValueChange={(dreGroup) =>
+                        onValueChange={dreGroup =>
                           upsertMappingMutation.mutate({
                             sourceType: "conta_azul_category",
                             sourceExternalId: item.externalId,
@@ -1596,7 +1628,7 @@ export default function DreGerencial() {
                           <SelectValue placeholder="Selecionar grupo..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {DRE_GROUP_OPTIONS.map((opt) => (
+                          {DRE_GROUP_OPTIONS.map(opt => (
                             <SelectItem key={opt.value} value={opt.value}>
                               {opt.label}
                             </SelectItem>
@@ -1624,11 +1656,8 @@ export default function DreGerencial() {
                     </tr>
                   </thead>
                   <tbody>
-                    {mappingsList.map((m) => (
-                      <tr
-                        key={m.id}
-                        className="border-b border-border/30"
-                      >
+                    {mappingsList.map(m => (
+                      <tr key={m.id} className="border-b border-border/30">
                         <td className="px-3 py-2">
                           <p className="font-medium">{m.sourceName}</p>
                           <p className="text-xs text-muted-foreground">
@@ -1640,7 +1669,7 @@ export default function DreGerencial() {
                         <td className="px-3 py-2">
                           <Select
                             value={m.dreGroup}
-                            onValueChange={(dreGroup) =>
+                            onValueChange={dreGroup =>
                               upsertMappingMutation.mutate({
                                 sourceType: m.sourceType as any,
                                 sourceExternalId: m.sourceExternalId,
@@ -1653,11 +1682,8 @@ export default function DreGerencial() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {DRE_GROUP_OPTIONS.map((opt) => (
-                                <SelectItem
-                                  key={opt.value}
-                                  value={opt.value}
-                                >
+                              {DRE_GROUP_OPTIONS.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value}>
                                   {opt.label}
                                 </SelectItem>
                               ))}
