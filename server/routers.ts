@@ -42,8 +42,11 @@ import {
   getProdutosPorStatusEstoque,
   getEstoqueResumo,
   getEstoquePaginado,
+  getEstoqueProdutosAgrupadosPorMarca,
   getEstoqueFilterOptions,
   getEstoquePorCategoria,
+  getEstoquePorMarca,
+  getProjecaoPedidos,
   getClientesKPIs,
   getRankingClientes,
   getTopClientesPorPedidos,
@@ -348,14 +351,29 @@ export const appRouter = router({
         codigo: z.string().optional(),
         marca: z.string().optional(),
         categoria: z.string().optional(),
-        orderBy: z.enum(['gap', 'vendas3m', 'estoqueAtual', 'totalVendido3Meses', 'mediaVendasMensal']).optional(),
+        orderBy: z.enum(['gap', 'vendas3m', 'estoqueAtual', 'totalVendido3Meses', 'mediaVendasMensal', 'diasEstoque']).optional(),
         orderDir: z.enum(['asc', 'desc']).optional(),
-        excludeZeroStock: z.boolean().optional(),
       }).optional())
       .query(async ({ input }) => getProdutosEmAtencao(input ?? {})),
+    getProjecaoPedidos: publicProcedure
+      .input(z.object({
+        diasPedido: z.number().min(1),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+        search: z.string().optional(),
+        codigo: z.string().optional(),
+        marca: z.string().optional(),
+        categoria: z.string().optional(),
+        orderBy: z.enum(['vendas3m', 'estoqueAtual', 'totalVendido3Meses', 'mediaVendasMensal', 'diasEstoque']).optional(),
+        orderDir: z.enum(['asc', 'desc']).optional(),
+        excludeZeroStock: z.boolean().optional(),
+        excludeNoSales: z.boolean().optional(),
+      }))
+      .query(async ({ input }) => getProjecaoPedidos(input)),
     getTotal: publicProcedure.query(async () => getTotalEstoque()),
     getResumo: publicProcedure.query(async () => getEstoqueResumo()),
     getPorCategoria: publicProcedure.query(async () => getEstoquePorCategoria()),
+    getPorMarca: publicProcedure.query(async () => getEstoquePorMarca()),
     getPaginado: publicProcedure
       .input(z.object({
         limit: z.number().optional(),
@@ -369,6 +387,17 @@ export const appRouter = router({
         orderDir: z.enum(['asc', 'desc']).optional(),
       }).optional())
       .query(async ({ input }) => getEstoquePaginado(input ?? {})),
+    getProdutosAgrupadosPorMarca: publicProcedure
+      .input(z.object({
+        search: z.string().optional(),
+        codigo: z.string().optional(),
+        marca: z.string().optional(),
+        categoria: z.string().optional(),
+        status: z.enum(['semEstoque', 'emAtencao']).optional(),
+        orderBy: z.enum(['estoque']).optional(),
+        orderDir: z.enum(['asc', 'desc']).optional(),
+      }).optional())
+      .query(async ({ input }) => getEstoqueProdutosAgrupadosPorMarca(input ?? {})),
   }),
 
   // ============= VENDAS PROCEDURES =============

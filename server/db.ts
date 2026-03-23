@@ -235,10 +235,12 @@ interface EstoqueFilterParams {
   codigo?: string;
   marca?: string;
   categoria?: string;
-  orderBy?: 'gap' | 'vendas3m' | 'estoque' | 'estoqueAtual' | 'totalVendido3Meses' | 'mediaVendasMensal';
+  orderBy?: 'gap' | 'vendas3m' | 'estoque' | 'estoqueAtual' | 'totalVendido3Meses' | 'mediaVendasMensal' | 'diasEstoque';
   orderDir?: 'asc' | 'desc';
-  excludeZeroStock?: boolean;
 }
+
+const DIAS_UTEIS_MES = 22;
+const diasEstoqueSql = sql`FLOOR((COALESCE(p.estoque_total, 0) * ${DIAS_UTEIS_MES}) / NULLIF((COALESCE(v.total_vendido, 0) / 3), 0))`;
 
 function buildEstoqueFilters(alias: string, params: EstoqueFilterParams) {
   const clauses: ReturnType<typeof sql>[] = [];
@@ -277,8 +279,16 @@ export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
       p.nome,
       p.marca,
       p.categoria,
-      COALESCE(p.estoque_total, 0) AS estoque
+      COALESCE(p.estoque_total, 0) AS estoque,
+      COALESCE(v.total_vendido, 0) AS totalVendido3Meses,
+      ROUND(COALESCE(v.total_vendido, 0) / 3, 2) AS mediaVendasMensal
     FROM produtos p
+    LEFT JOIN (
+      SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
+      FROM vendas
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      GROUP BY cod_produto
+    ) v ON v.cod_produto = p.cod_produto
     WHERE p.ativo = 'ATIVO' AND COALESCE(p.estoque_total, 0) = 0 AND ${filters}
     ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
@@ -310,11 +320,12 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
         return sql`(COALESCE(v.total_vendido, 0) / 3) ${dir}`;
       case 'estoqueAtual':
         return sql`COALESCE(p.estoque_total, 0) ${dir}`;
+      case 'diasEstoque':
+        return sql`${diasEstoqueSql} ${dir}`;
       default:
         return sql`(COALESCE(v.total_vendido, 0) / 3) - COALESCE(p.estoque_total, 0) DESC`;
     }
   })();
-  const zeroStockClause = params.excludeZeroStock ? sql`AND COALESCE(p.estoque_total, 0) > 0` : sql``;
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto                         AS codProduto,
@@ -323,7 +334,8 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
       p.categoria,
       COALESCE(p.estoque_total, 0)          AS estoqueAtual,
       COALESCE(v.total_vendido, 0)          AS totalVendido3Meses,
-      ROUND(COALESCE(v.total_vendido, 0) / 3, 2) AS mediaVendasMensal
+      ROUND(COALESCE(v.total_vendido, 0) / 3, 2) AS mediaVendasMensal,
+      ${diasEstoqueSql}                     AS diasEstoque
     FROM produtos p
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
@@ -332,9 +344,9 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
     WHERE p.ativo = 'ATIVO'
+      AND COALESCE(p.estoque_total, 0) > 0
       AND COALESCE(v.total_vendido, 0) > 0
       AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
-      ${zeroStockClause}
       AND ${filters}
     ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
@@ -349,9 +361,88 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
     WHERE p.ativo = 'ATIVO'
+      AND COALESCE(p.estoque_total, 0) > 0
       AND COALESCE(v.total_vendido, 0) > 0
       AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
-      ${zeroStockClause}
+      AND ${filters}
+  `);
+  return {
+    data: (dataRows[0] as unknown) as any[],
+    total: Number(((countRows[0] as unknown) as any[])[0]?.total || 0),
+  };
+}
+
+export async function getProjecaoPedidos(params: EstoqueFilterParams & {
+  diasPedido: number;
+  excludeZeroStock?: boolean;
+  /** When true (default), only products with sales in the last 3 months. When false, also include products with zero sales in that window. */
+  excludeNoSales?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) return { data: [], total: 0 };
+  const limit = params.limit || 50;
+  const offset = params.offset || 0;
+  const filters = buildEstoqueFilters('p', params);
+  const diasPedido = Number(params.diasPedido);
+  const excludeNoSales = params.excludeNoSales !== false;
+  const orderByClause = (() => {
+    const dir = params.orderDir === 'desc' ? sql`DESC` : sql`ASC`;
+    switch (params.orderBy) {
+      case 'vendas3m':
+      case 'totalVendido3Meses':
+        return sql`COALESCE(v.total_vendido, 0) ${dir}`;
+      case 'mediaVendasMensal':
+        return sql`(COALESCE(v.total_vendido, 0) / 3) ${dir}`;
+      case 'estoqueAtual':
+        return sql`COALESCE(p.estoque_total, 0) ${dir}`;
+      case 'diasEstoque':
+      default:
+        return sql`${diasEstoqueSql} ${dir}`;
+    }
+  })();
+  const excludeZeroClause = params.excludeZeroStock ? sql`AND COALESCE(p.estoque_total, 0) > 0` : sql``;
+  const projecaoDiasClause = excludeNoSales
+    ? sql`AND COALESCE(v.total_vendido, 0) > 0 AND ${diasEstoqueSql} < ${diasPedido}`
+    : sql`AND (
+        (COALESCE(v.total_vendido, 0) > 0 AND ${diasEstoqueSql} < ${diasPedido})
+        OR COALESCE(v.total_vendido, 0) = 0
+      )`;
+  const dataRows = await db.execute(sql`
+    SELECT
+      p.cod_produto                         AS codProduto,
+      p.nome,
+      p.marca,
+      p.categoria,
+      COALESCE(p.estoque_total, 0)          AS estoqueAtual,
+      COALESCE(v.total_vendido, 0)          AS totalVendido3Meses,
+      ROUND(COALESCE(v.total_vendido, 0) / 3, 2) AS mediaVendasMensal,
+      ${diasEstoqueSql}                     AS diasEstoque
+    FROM produtos p
+    LEFT JOIN (
+      SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
+      FROM vendas
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      GROUP BY cod_produto
+    ) v ON v.cod_produto = p.cod_produto
+    WHERE p.ativo = 'ATIVO'
+      ${projecaoDiasClause}
+      ${excludeZeroClause}
+      AND ${filters}
+    ORDER BY ${orderByClause}
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+  const countRows = await db.execute(sql`
+    SELECT COUNT(*) AS total
+    FROM produtos p
+    LEFT JOIN (
+      SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
+      FROM vendas
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      GROUP BY cod_produto
+    ) v ON v.cod_produto = p.cod_produto
+    WHERE p.ativo = 'ATIVO'
+      ${projecaoDiasClause}
+      ${excludeZeroClause}
       AND ${filters}
   `);
   return {
@@ -382,6 +473,7 @@ export async function getEstoqueResumo() {
       SUM(CASE WHEN COALESCE(p.estoque_total, 0) = 0 THEN 1 ELSE 0 END) AS semEstoque,
       SUM(CASE
         WHEN COALESCE(v.total_vendido, 0) > 0
+         AND COALESCE(p.estoque_total, 0) > 0
          AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
         THEN 1 ELSE 0
       END) AS emAtencao
@@ -413,6 +505,7 @@ export async function getEstoquePorCategoria() {
       SUM(CASE WHEN COALESCE(p.estoque_total, 0) = 0 THEN 1 ELSE 0 END) AS semEstoque,
       SUM(CASE
         WHEN COALESCE(v.total_vendido, 0) > 0
+         AND COALESCE(p.estoque_total, 0) > 0
          AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
         THEN 1 ELSE 0
       END) AS emAtencao
@@ -428,6 +521,7 @@ export async function getEstoquePorCategoria() {
     ORDER BY (SUM(CASE WHEN COALESCE(p.estoque_total, 0) = 0 THEN 1 ELSE 0 END) +
       SUM(CASE
         WHEN COALESCE(v.total_vendido, 0) > 0
+         AND COALESCE(p.estoque_total, 0) > 0
          AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
         THEN 1 ELSE 0
       END)) DESC
@@ -435,6 +529,46 @@ export async function getEstoquePorCategoria() {
   `);
   return ((rows[0] as unknown) as any[]).map((r: any) => ({
     categoria: r.categoria,
+    totalProdutos: Number(r.totalProdutos || 0),
+    semEstoque: Number(r.semEstoque || 0),
+    emAtencao: Number(r.emAtencao || 0),
+  }));
+}
+
+export async function getEstoquePorMarca() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.execute(sql`
+    SELECT
+      p.marca,
+      COUNT(*) AS totalProdutos,
+      SUM(CASE WHEN COALESCE(p.estoque_total, 0) = 0 THEN 1 ELSE 0 END) AS semEstoque,
+      SUM(CASE
+        WHEN COALESCE(v.total_vendido, 0) > 0
+         AND COALESCE(p.estoque_total, 0) > 0
+         AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
+        THEN 1 ELSE 0
+      END) AS emAtencao
+    FROM produtos p
+    LEFT JOIN (
+      SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
+      FROM vendas
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      GROUP BY cod_produto
+    ) v ON v.cod_produto = p.cod_produto
+    WHERE p.ativo = 'ATIVO' AND p.marca IS NOT NULL AND p.marca != ''
+    GROUP BY p.marca
+    ORDER BY (SUM(CASE WHEN COALESCE(p.estoque_total, 0) = 0 THEN 1 ELSE 0 END) +
+      SUM(CASE
+        WHEN COALESCE(v.total_vendido, 0) > 0
+         AND COALESCE(p.estoque_total, 0) > 0
+         AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
+        THEN 1 ELSE 0
+      END)) DESC
+    LIMIT 10
+  `);
+  return ((rows[0] as unknown) as any[]).map((r: any) => ({
+    marca: r.marca,
     totalProdutos: Number(r.totalProdutos || 0),
     semEstoque: Number(r.semEstoque || 0),
     emAtencao: Number(r.emAtencao || 0),
@@ -452,21 +586,20 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
   const offset = params.offset || 0;
   const filters = buildEstoqueFilters('p', params);
 
-  const needsVendas = params.status === 'emAtencao';
-  const vendasJoin = needsVendas ? sql`
+  const vendasJoin = sql`
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
       WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-  ` : sql``;
+  `;
 
   let statusClause = sql``;
   if (params.status === 'semEstoque') {
     statusClause = sql`AND COALESCE(p.estoque_total, 0) = 0`;
   } else if (params.status === 'emAtencao') {
-    statusClause = sql`AND COALESCE(v.total_vendido, 0) > 0 AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)`;
+    statusClause = sql`AND COALESCE(v.total_vendido, 0) > 0 AND COALESCE(p.estoque_total, 0) > 0 AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)`;
   }
   const orderByClause = params.orderDir === 'desc'
     ? sql`COALESCE(p.estoque_total, 0) DESC, p.nome ASC`
@@ -478,7 +611,10 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
       p.nome,
       p.marca,
       p.categoria,
-      COALESCE(p.estoque_total, 0) AS estoque
+      COALESCE(p.estoque_total, 0) AS estoque,
+      COALESCE(v.total_vendido, 0) AS totalVendido3Meses,
+      ROUND(COALESCE(v.total_vendido, 0) / 3, 2) AS mediaVendasMensal,
+      ${diasEstoqueSql} AS diasEstoque
     FROM produtos p
     ${vendasJoin}
     WHERE p.ativo = 'ATIVO' AND ${filters} ${statusClause}
@@ -495,6 +631,75 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
     data: (dataRows[0] as unknown) as any[],
     total: Number(((countRows[0] as unknown) as any[])[0]?.total || 0),
   };
+}
+
+export type EstoqueProdutoListaRow = {
+  codProduto: number;
+  nome: string | null;
+  marca: string | null;
+  categoria: string | null;
+  estoque: number;
+  totalVendido3Meses: number;
+  mediaVendasMensal: number;
+  diasEstoque: unknown;
+};
+
+export async function getEstoqueProdutosAgrupadosPorMarca(params: EstoquePaginadoParams = {}) {
+  const db = await getDb();
+  if (!db) return { groups: [] as { marca: string; produtos: EstoqueProdutoListaRow[] }[] };
+  const filters = buildEstoqueFilters('p', params);
+
+  const vendasJoin = sql`
+    LEFT JOIN (
+      SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
+      FROM vendas
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      GROUP BY cod_produto
+    ) v ON v.cod_produto = p.cod_produto
+  `;
+
+  let statusClause = sql``;
+  if (params.status === 'semEstoque') {
+    statusClause = sql`AND COALESCE(p.estoque_total, 0) = 0`;
+  } else if (params.status === 'emAtencao') {
+    statusClause = sql`AND COALESCE(v.total_vendido, 0) > 0 AND COALESCE(p.estoque_total, 0) > 0 AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)`;
+  }
+
+  const productOrder = params.orderDir === 'desc'
+    ? sql`COALESCE(p.estoque_total, 0) DESC, p.nome ASC`
+    : sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
+
+  const marcaBucket = sql`CASE WHEN (p.marca IS NULL OR TRIM(COALESCE(p.marca, '')) = '') THEN 1 ELSE 0 END`;
+
+  const dataRows = await db.execute(sql`
+    SELECT
+      p.cod_produto   AS codProduto,
+      p.nome,
+      p.marca,
+      p.categoria,
+      COALESCE(p.estoque_total, 0) AS estoque,
+      COALESCE(v.total_vendido, 0) AS totalVendido3Meses,
+      ROUND(COALESCE(v.total_vendido, 0) / 3, 2) AS mediaVendasMensal,
+      ${diasEstoqueSql} AS diasEstoque
+    FROM produtos p
+    ${vendasJoin}
+    WHERE p.ativo = 'ATIVO' AND ${filters} ${statusClause}
+    ORDER BY ${marcaBucket} ASC, p.marca ASC, ${productOrder}
+  `);
+
+  const rows = (dataRows[0] as unknown) as EstoqueProdutoListaRow[];
+  const groups: { marca: string; produtos: EstoqueProdutoListaRow[] }[] = [];
+  for (const row of rows) {
+    const label =
+      row.marca != null && String(row.marca).trim() !== '' ? String(row.marca).trim() : 'Sem marca';
+    const last = groups[groups.length - 1];
+    if (!last || last.marca !== label) {
+      groups.push({ marca: label, produtos: [row] });
+    } else {
+      last.produtos.push(row);
+    }
+  }
+  return { groups };
 }
 
 // ============= EQUIPE OPERATIONS =============

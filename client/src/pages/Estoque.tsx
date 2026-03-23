@@ -8,6 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -254,12 +261,46 @@ function SkeletonRows({ cols }: { cols: number }) {
   );
 }
 
+function buildEstoqueListFilters(filters: Filters) {
+  return {
+    search: filters.search || undefined,
+    codigo: filters.codigo || undefined,
+    marca: filters.marca || undefined,
+    categoria: filters.categoria || undefined,
+  };
+}
+
+function EstoqueProdutoRow({ p, fmtDiasEstoque }: { p: any; fmtDiasEstoque: (v: unknown) => string }) {
+  return (
+    <tr>
+      <td className="font-mono text-xs text-muted-foreground">{p.codProduto}</td>
+      <td className="font-medium max-w-[220px] truncate">{p.nome || "—"}</td>
+      <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
+      <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
+      <td className="text-right text-muted-foreground">
+        {Number(p.totalVendido3Meses ?? 0).toLocaleString("pt-BR")}
+      </td>
+      <td className="text-right text-muted-foreground">
+        {Number(p.mediaVendasMensal ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+      </td>
+      <td className={`text-right font-bold ${Number(p.estoque ?? 0) === 0 ? "text-rose-500" : "text-emerald-500"}`}>
+        {Number(p.estoque ?? 0).toLocaleString("pt-BR")}
+      </td>
+      <td className="text-right text-muted-foreground">
+        {fmtDiasEstoque(p.diasEstoque)}
+      </td>
+    </tr>
+  );
+}
+
 export default function Estoque() {
   const [activeTab, setActiveTab] = useState("visualizacao");
   const [semEstoqueOrderBy, setSemEstoqueOrderBy] = useState<"estoque">("estoque");
   const [semEstoqueOrderDir, setSemEstoqueOrderDir] = useState<"asc" | "desc">("asc");
-  const [emAtencaoOrderBy, setEmAtencaoOrderBy] = useState<"estoqueAtual" | "totalVendido3Meses" | "mediaVendasMensal">("estoqueAtual");
+  const [emAtencaoOrderBy, setEmAtencaoOrderBy] = useState<"estoqueAtual" | "totalVendido3Meses" | "mediaVendasMensal" | "diasEstoque">("estoqueAtual");
   const [emAtencaoOrderDir, setEmAtencaoOrderDir] = useState<"asc" | "desc">("asc");
+  const [projecaoOrderBy, setProjecaoOrderBy] = useState<"vendas3m" | "estoqueAtual" | "totalVendido3Meses" | "mediaVendasMensal" | "diasEstoque">("diasEstoque");
+  const [projecaoOrderDir, setProjecaoOrderDir] = useState<"asc" | "desc">("asc");
   const [todosOrderBy, setTodosOrderBy] = useState<"estoque">("estoque");
   const [todosOrderDir, setTodosOrderDir] = useState<"asc" | "desc">("asc");
 
@@ -271,9 +312,21 @@ export default function Estoque() {
   const [emAtencaoPageSize, setEmAtencaoPageSize] = useState(25);
   const [emAtencaoFilters, setEmAtencaoFilters] = useState<Filters>(emptyFilters);
 
+  const [projecaoPage, setProjecaoPage] = useState(0);
+  const [projecaoPageSize, setProjecaoPageSize] = useState(25);
+  const [projecaoFilters, setProjecaoFilters] = useState<Filters>(emptyFilters);
+  const [diasPedido, setDiasPedido] = useState("30");
+  const [projecaoExcluirEstoqueZero, setProjecaoExcluirEstoqueZero] = useState(false);
+  const [projecaoExcluirSemVendas3m, setProjecaoExcluirSemVendas3m] = useState(true);
+
   const [todosPage, setTodosPage] = useState(0);
   const [todosPageSize, setTodosPageSize] = useState(25);
   const [todosFilters, setTodosFilters] = useState<Filters>(emptyFilters);
+
+  const [porMarcaFilters, setPorMarcaFilters] = useState<Filters>(emptyFilters);
+  const [porMarcaOrderBy, setPorMarcaOrderBy] = useState<"estoque">("estoque");
+  const [porMarcaOrderDir, setPorMarcaOrderDir] = useState<"asc" | "desc">("asc");
+  const [, setPorMarcaPageDummy] = useState(0);
 
   const { data: resumo } = trpc.estoque.getResumo.useQuery();
   const { data: filterOptions } = trpc.estoque.getFilterOptions.useQuery();
@@ -281,20 +334,16 @@ export default function Estoque() {
     limit: 10,
     orderBy: "mediaVendasMensal",
     orderDir: "desc",
-    excludeZeroStock: true,
   });
-  const { data: porCategoriaData } = trpc.estoque.getPorCategoria.useQuery();
+  const { data: estoqueMarcasProblemasData } = trpc.estoque.getPorMarca.useQuery();
 
   const marcas = filterOptions?.marcas ?? [];
   const categorias = filterOptions?.categorias ?? [];
 
   const buildParams = (filters: Filters, page: number, pageSize: number) => ({
+    ...buildEstoqueListFilters(filters),
     limit: pageSize,
     offset: page * pageSize,
-    search: filters.search || undefined,
-    codigo: filters.codigo || undefined,
-    marca: filters.marca || undefined,
-    categoria: filters.categoria || undefined,
   });
 
   const { data: semEstoqueData, isLoading: semEstoqueLoading } = trpc.estoque.getSemEstoque.useQuery(
@@ -304,6 +353,19 @@ export default function Estoque() {
   const { data: emAtencaoData, isLoading: emAtencaoLoading } = trpc.estoque.getEmAtencao.useQuery(
     { ...buildParams(emAtencaoFilters, emAtencaoPage, emAtencaoPageSize), orderBy: emAtencaoOrderBy, orderDir: emAtencaoOrderDir }
   );
+  const diasPedidoNumero = Number(diasPedido);
+  const projecaoHabilitada = Number.isFinite(diasPedidoNumero) && diasPedidoNumero > 0;
+  const { data: projecaoData, isLoading: projecaoLoading } = trpc.estoque.getProjecaoPedidos.useQuery(
+    {
+      ...buildParams(projecaoFilters, projecaoPage, projecaoPageSize),
+      diasPedido: diasPedidoNumero,
+      orderBy: projecaoOrderBy,
+      orderDir: projecaoOrderDir,
+      excludeZeroStock: projecaoExcluirEstoqueZero,
+      excludeNoSales: projecaoExcluirSemVendas3m,
+    },
+    { enabled: projecaoHabilitada }
+  );
 
   const { data: todosData, isLoading: todosLoading } = trpc.estoque.getPaginado.useQuery({
     ...buildParams(todosFilters, todosPage, todosPageSize),
@@ -311,6 +373,17 @@ export default function Estoque() {
     orderBy: todosOrderBy,
     orderDir: todosOrderDir,
   });
+
+  const { data: produtosAgrupadosPorMarca, isLoading: produtosPorMarcaLoading } =
+    trpc.estoque.getProdutosAgrupadosPorMarca.useQuery(
+      {
+        ...buildEstoqueListFilters(porMarcaFilters),
+        status: (porMarcaFilters.status as "semEstoque" | "emAtencao") || undefined,
+        orderBy: porMarcaOrderBy,
+        orderDir: porMarcaOrderDir,
+      },
+      { enabled: activeTab === "porMarca" },
+    );
 
   const applyFilters = (
     setter: React.Dispatch<React.SetStateAction<Filters>>,
@@ -333,6 +406,13 @@ export default function Estoque() {
     return dir === "asc"
       ? <ArrowUp className="h-3.5 w-3.5 text-foreground" />
       : <ArrowDown className="h-3.5 w-3.5 text-foreground" />;
+  };
+
+  const fmtDiasEstoque = (v: unknown) => {
+    if (v == null || v === "") return "—";
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return Math.floor(n).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
   };
 
   return (
@@ -395,6 +475,8 @@ export default function Estoque() {
           <TabsTrigger value="visualizacao">Visualização</TabsTrigger>
           <TabsTrigger value="semEstoque">Sem Estoque</TabsTrigger>
           <TabsTrigger value="emAtencao">Em Atenção</TabsTrigger>
+          <TabsTrigger value="projecaoPedidos">Projeção de Pedidos</TabsTrigger>
+          <TabsTrigger value="porMarca">Estoque por Marca</TabsTrigger>
           <TabsTrigger value="todos">Todos os Produtos</TabsTrigger>
         </TabsList>
 
@@ -422,6 +504,8 @@ export default function Estoque() {
                       <th>Produto</th>
                       <th>Marca</th>
                       <th>Categoria</th>
+                      <th className="text-right">Vendido (3m)</th>
+                      <th className="text-right">Média Mensal</th>
                       <th className="text-right">
                         <button
                           type="button"
@@ -440,10 +524,10 @@ export default function Estoque() {
                   </thead>
                   <tbody>
                     {semEstoqueLoading ? (
-                      <SkeletonRows cols={5} />
+                      <SkeletonRows cols={7} />
                     ) : !semEstoqueData?.data?.length ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                           <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
                           <p>Nenhum produto ativo com estoque zerado</p>
                         </td>
@@ -455,6 +539,12 @@ export default function Estoque() {
                           <td className="font-medium max-w-[250px] truncate">{p.nome || "—"}</td>
                           <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
                           <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
+                          <td className="text-right text-muted-foreground">
+                            {Number(p.totalVendido3Meses ?? 0).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="text-right text-muted-foreground">
+                            {Number(p.mediaVendasMensal ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+                          </td>
                           <td className="text-right font-bold text-rose-500">0</td>
                         </tr>
                       ))
@@ -507,20 +597,6 @@ export default function Estoque() {
                           className="inline-flex items-center gap-1 ml-auto"
                           onClick={() => {
                             setEmAtencaoPage(0);
-                            setEmAtencaoOrderBy("estoqueAtual");
-                            setEmAtencaoOrderDir(prev => (emAtencaoOrderBy === "estoqueAtual" ? (prev === "asc" ? "desc" : "asc") : "asc"));
-                          }}
-                        >
-                          Estoque Atual
-                          {renderSortIcon(emAtencaoOrderBy === "estoqueAtual", emAtencaoOrderDir)}
-                        </button>
-                      </th>
-                      <th className="text-right">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 ml-auto"
-                          onClick={() => {
-                            setEmAtencaoPage(0);
                             setEmAtencaoOrderBy("totalVendido3Meses");
                             setEmAtencaoOrderDir(prev => (emAtencaoOrderBy === "totalVendido3Meses" ? (prev === "asc" ? "desc" : "asc") : "asc"));
                           }}
@@ -543,14 +619,42 @@ export default function Estoque() {
                           {renderSortIcon(emAtencaoOrderBy === "mediaVendasMensal", emAtencaoOrderDir)}
                         </button>
                       </th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setEmAtencaoPage(0);
+                            setEmAtencaoOrderBy("estoqueAtual");
+                            setEmAtencaoOrderDir(prev => (emAtencaoOrderBy === "estoqueAtual" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Estoque Atual
+                          {renderSortIcon(emAtencaoOrderBy === "estoqueAtual", emAtencaoOrderDir)}
+                        </button>
+                      </th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setEmAtencaoPage(0);
+                            setEmAtencaoOrderBy("diasEstoque");
+                            setEmAtencaoOrderDir(prev => (emAtencaoOrderBy === "diasEstoque" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Dias de estoque
+                          {renderSortIcon(emAtencaoOrderBy === "diasEstoque", emAtencaoOrderDir)}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {emAtencaoLoading ? (
-                      <SkeletonRows cols={7} />
+                      <SkeletonRows cols={8} />
                     ) : !emAtencaoData?.data?.length ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                        <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                           <Eye className="h-8 w-8 mx-auto mb-2 opacity-30" />
                           <p>Nenhum produto em atenção</p>
                         </td>
@@ -562,14 +666,17 @@ export default function Estoque() {
                           <td className="font-medium max-w-[200px] truncate">{p.nome || "—"}</td>
                           <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
                           <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
-                          <td className="text-right font-bold text-amber-500">
-                            {Number(p.estoqueAtual ?? 0).toLocaleString("pt-BR")}
-                          </td>
                           <td className="text-right text-muted-foreground">
                             {Number(p.totalVendido3Meses ?? 0).toLocaleString("pt-BR")}
                           </td>
                           <td className="text-right text-muted-foreground">
                             {Number(p.mediaVendasMensal ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+                          </td>
+                          <td className="text-right font-bold text-amber-500">
+                            {Number(p.estoqueAtual ?? 0).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="text-right font-medium text-muted-foreground">
+                            {fmtDiasEstoque(p.diasEstoque)}
                           </td>
                         </tr>
                       ))
@@ -585,6 +692,277 @@ export default function Estoque() {
                 onPageChange={setEmAtencaoPage}
                 onPageSizeChange={setEmAtencaoPageSize}
               />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aba: Projeção de Pedidos */}
+        <TabsContent value="projecaoPedidos">
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-sm font-semibold">
+                Projeção de Pedidos
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  Produtos com dias de estoque abaixo do prazo de pedido
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <div className="px-4 pt-3 flex flex-wrap items-end gap-6">
+              <div className="max-w-[220px]">
+                <label className="text-xs text-muted-foreground block mb-1">Dias de pedido</label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={diasPedido}
+                  onChange={(e) => {
+                    setDiasPedido(e.target.value);
+                    setProjecaoPage(0);
+                  }}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer pb-2">
+                <Checkbox
+                  checked={projecaoExcluirEstoqueZero}
+                  onCheckedChange={(v) => {
+                    setProjecaoExcluirEstoqueZero(v === true);
+                    setProjecaoPage(0);
+                  }}
+                />
+                <span>Excluir produtos com estoque zerado</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer pb-2">
+                <Checkbox
+                  checked={projecaoExcluirSemVendas3m}
+                  onCheckedChange={(v) => {
+                    setProjecaoExcluirSemVendas3m(v === true);
+                    setProjecaoPage(0);
+                  }}
+                />
+                <span>Excluir produtos sem vendas nos últimos 3 meses</span>
+              </label>
+            </div>
+            <FilterBar
+              applied={projecaoFilters}
+              onApply={applyFilters(setProjecaoFilters, setProjecaoPage)}
+              onClear={clearFilters(setProjecaoFilters, setProjecaoPage)}
+              marcas={marcas}
+              categorias={categorias}
+            />
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Produto</th>
+                      <th>Marca</th>
+                      <th>Categoria</th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setProjecaoPage(0);
+                            setProjecaoOrderBy("totalVendido3Meses");
+                            setProjecaoOrderDir(prev => (projecaoOrderBy === "totalVendido3Meses" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Vendido (3m)
+                          {renderSortIcon(projecaoOrderBy === "totalVendido3Meses", projecaoOrderDir)}
+                        </button>
+                      </th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setProjecaoPage(0);
+                            setProjecaoOrderBy("mediaVendasMensal");
+                            setProjecaoOrderDir(prev => (projecaoOrderBy === "mediaVendasMensal" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Média Mensal
+                          {renderSortIcon(projecaoOrderBy === "mediaVendasMensal", projecaoOrderDir)}
+                        </button>
+                      </th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setProjecaoPage(0);
+                            setProjecaoOrderBy("estoqueAtual");
+                            setProjecaoOrderDir(prev => (projecaoOrderBy === "estoqueAtual" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Estoque Atual
+                          {renderSortIcon(projecaoOrderBy === "estoqueAtual", projecaoOrderDir)}
+                        </button>
+                      </th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setProjecaoPage(0);
+                            setProjecaoOrderBy("diasEstoque");
+                            setProjecaoOrderDir(prev => (projecaoOrderBy === "diasEstoque" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Dias de estoque
+                          {renderSortIcon(projecaoOrderBy === "diasEstoque", projecaoOrderDir)}
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!projecaoHabilitada ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                          Informe um valor maior que 0 em Dias de pedido para gerar a projeção.
+                        </td>
+                      </tr>
+                    ) : projecaoLoading ? (
+                      <SkeletonRows cols={8} />
+                    ) : !projecaoData?.data?.length ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                          <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          <p>Nenhum produto abaixo do prazo informado</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      projecaoData.data.map((p: any, i: number) => (
+                        <tr key={i}>
+                          <td className="font-mono text-xs text-muted-foreground">{p.codProduto}</td>
+                          <td className="font-medium max-w-[200px] truncate">{p.nome || "—"}</td>
+                          <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
+                          <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
+                          <td className="text-right text-muted-foreground">
+                            {Number(p.totalVendido3Meses ?? 0).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="text-right text-muted-foreground">
+                            {Number(p.mediaVendasMensal ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+                          </td>
+                          <td className="text-right font-bold text-amber-500">
+                            {Number(p.estoqueAtual ?? 0).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="text-right font-medium text-rose-500">
+                            {fmtDiasEstoque(p.diasEstoque)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={projecaoPage}
+                totalPages={Math.ceil((projecaoData?.total || 0) / projecaoPageSize)}
+                total={projecaoData?.total || 0}
+                pageSize={projecaoPageSize}
+                onPageChange={setProjecaoPage}
+                onPageSizeChange={setProjecaoPageSize}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aba: Estoque por Marca */}
+        <TabsContent value="porMarca">
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-sm font-semibold">Estoque por Marca</CardTitle>
+            </CardHeader>
+            <FilterBar
+              applied={porMarcaFilters}
+              onApply={applyFilters(setPorMarcaFilters, setPorMarcaPageDummy)}
+              onClear={clearFilters(setPorMarcaFilters, setPorMarcaPageDummy)}
+              marcas={marcas}
+              categorias={categorias}
+              showStatus
+            />
+            <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-2 border-b bg-muted/5">
+              <span className="text-xs text-muted-foreground">Ordenação dos produtos:</span>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium hover:bg-muted/50"
+                onClick={() => {
+                  setPorMarcaOrderBy("estoque");
+                  setPorMarcaOrderDir(prev =>
+                    porMarcaOrderBy === "estoque" ? (prev === "asc" ? "desc" : "asc") : "asc",
+                  );
+                }}
+              >
+                Estoque
+                {renderSortIcon(porMarcaOrderBy === "estoque", porMarcaOrderDir)}
+              </button>
+            </div>
+            <CardContent className="p-0">
+              {produtosPorMarcaLoading ? (
+                <div className="overflow-x-auto">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Código</th>
+                        <th>Produto</th>
+                        <th>Marca</th>
+                        <th>Categoria</th>
+                        <th className="text-right">Vendido (3m)</th>
+                        <th className="text-right">Média Mensal</th>
+                        <th className="text-right">Estoque</th>
+                        <th className="text-right">Dias de estoque</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <SkeletonRows cols={8} />
+                    </tbody>
+                  </table>
+                </div>
+              ) : !produtosAgrupadosPorMarca?.groups?.length ? (
+                <div className="px-4 py-12 text-center text-muted-foreground">
+                  <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p>Nenhum produto encontrado</p>
+                </div>
+              ) : (
+                <Accordion type="multiple" className="w-full">
+                  {produtosAgrupadosPorMarca.groups.map((g, idx) => (
+                    <AccordionItem key={`marca-${idx}`} value={`marca-${idx}`} className="border-b">
+                      <AccordionTrigger className="px-4 py-3 text-sm font-medium hover:no-underline">
+                        <span className="truncate text-left">
+                          {g.marca}
+                          <span className="ml-2 font-normal text-muted-foreground">
+                            ({g.produtos.length})
+                          </span>
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-0">
+                        <div className="overflow-x-auto border-t">
+                          <table className="data-table">
+                            <thead>
+                              <tr>
+                                <th>Código</th>
+                                <th>Produto</th>
+                                <th>Marca</th>
+                                <th>Categoria</th>
+                                <th className="text-right">Vendido (3m)</th>
+                                <th className="text-right">Média Mensal</th>
+                                <th className="text-right">Estoque</th>
+                                <th className="text-right">Dias de estoque</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.produtos.map((p: any) => (
+                                <EstoqueProdutoRow key={p.codProduto} p={p} fmtDiasEstoque={fmtDiasEstoque} />
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -612,6 +990,8 @@ export default function Estoque() {
                       <th>Produto</th>
                       <th>Marca</th>
                       <th>Categoria</th>
+                      <th className="text-right">Vendido (3m)</th>
+                      <th className="text-right">Média Mensal</th>
                       <th className="text-right">
                         <button
                           type="button"
@@ -626,29 +1006,22 @@ export default function Estoque() {
                           {renderSortIcon(todosOrderBy === "estoque", todosOrderDir)}
                         </button>
                       </th>
+                      <th className="text-right">Dias de estoque</th>
                     </tr>
                   </thead>
                   <tbody>
                     {todosLoading ? (
-                      <SkeletonRows cols={5} />
+                      <SkeletonRows cols={8} />
                     ) : !todosData?.data?.length ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                        <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                           <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
                           <p>Nenhum produto encontrado</p>
                         </td>
                       </tr>
                     ) : (
-                      todosData.data.map((p: any, i: number) => (
-                        <tr key={i}>
-                          <td className="font-mono text-xs text-muted-foreground">{p.codProduto}</td>
-                          <td className="font-medium max-w-[220px] truncate">{p.nome || "—"}</td>
-                          <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
-                          <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
-                          <td className={`text-right font-bold ${Number(p.estoque ?? 0) === 0 ? "text-rose-500" : "text-emerald-500"}`}>
-                            {Number(p.estoque ?? 0).toLocaleString("pt-BR")}
-                          </td>
-                        </tr>
+                      todosData.data.map((p: any) => (
+                        <EstoqueProdutoRow key={p.codProduto} p={p} fmtDiasEstoque={fmtDiasEstoque} />
                       ))
                     )}
                   </tbody>
@@ -674,7 +1047,9 @@ export default function Estoque() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
                   Top 10 Produtos em Atenção
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">Estoque Atual vs Média de venda (3 meses)</span>
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    Média de venda (3m), estoque atual e dias de estoque
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -683,13 +1058,18 @@ export default function Estoque() {
                     <BarChart3 className="h-8 w-8 mr-2 opacity-30" /> Nenhum dado disponível
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={Math.max(320, (topAtencaoData.data.length) * 40)}>
+                  <ResponsiveContainer width="100%" height={Math.max(360, (topAtencaoData.data.length) * 48)}>
                     <BarChart
-                      data={topAtencaoData.data.map((p: any) => ({
-                        produto: (p.nome || String(p.codProduto) || "—").slice(0, 25),
-                        "Estoque Atual": Number(p.estoqueAtual ?? 0),
-                        "Média Venda (3m)": Number(p.mediaVendasMensal ?? 0),
-                      }))}
+                      data={topAtencaoData.data.map((p: any) => {
+                        const n = Number(p.diasEstoque);
+                        const dias = Number.isFinite(n) ? Math.floor(n) : 0;
+                        return {
+                          produto: (p.nome || String(p.codProduto) || "—").slice(0, 25),
+                          "Média Venda (3m)": Number(p.mediaVendasMensal ?? 0),
+                          "Estoque Atual": Number(p.estoqueAtual ?? 0),
+                          "Dias de estoque": dias,
+                        };
+                      })}
                       layout="vertical"
                       margin={{ left: 10, right: 20 }}
                     >
@@ -698,8 +1078,9 @@ export default function Estoque() {
                       <YAxis type="category" dataKey="produto" tick={{ fontSize: 10 }} width={160} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="Estoque Atual" fill={CHART_COLORS.indigo} radius={[0, 4, 4, 0]} />
                       <Bar dataKey="Média Venda (3m)" fill={CHART_COLORS.amber} radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="Estoque Atual" fill={CHART_COLORS.indigo} radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="Dias de estoque" fill={CHART_COLORS.emerald} radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -751,30 +1132,30 @@ export default function Estoque() {
                 </CardContent>
               </Card>
 
-              {/* Top 10 Categorias com Problemas */}
+              {/* Top 10 Marcas com Problemas */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-semibold">
-                    Top 10 Categorias com Problemas de Estoque
+                    Top 10 Marcas com Problemas de Estoque
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {!porCategoriaData?.length ? (
+                  {!estoqueMarcasProblemasData?.length ? (
                     <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
                       <BarChart3 className="h-8 w-8 mr-2 opacity-30" /> Nenhum dado disponível
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height={280}>
                       <BarChart
-                        data={porCategoriaData.map((c: any) => ({
-                          categoria: (c.categoria || "—").slice(0, 18),
+                        data={estoqueMarcasProblemasData.map((c: any) => ({
+                          marca: (c.marca || "—").slice(0, 18),
                           "Sem Estoque": Number(c.semEstoque ?? 0),
                           "Em Atenção": Number(c.emAtencao ?? 0),
                         }))}
                         margin={{ left: 0, right: 10 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="categoria" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={60} />
+                        <XAxis dataKey="marca" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={60} />
                         <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                         <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ fontSize: 12 }} />
