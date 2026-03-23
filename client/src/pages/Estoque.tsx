@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { Search, AlertTriangle, Package, TrendingDown, ChevronLeft, ChevronRight, BarChart3, Warehouse } from "lucide-react";
+import { Search, AlertTriangle, Package, Eye, ChevronLeft, ChevronRight, Warehouse, X, Filter, BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,84 +8,324 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
 
-const ITEMS_PER_PAGE = 50;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
-// Limiares devem corresponder aos definidos em db.ts
-const LIMIAR_CRITICO = 50;
-const LIMIAR_BAIXO = 200;
-
-function getStockColor(qty: number): string {
-  if (qty <= 0) return "text-destructive";
-  if (qty <= LIMIAR_CRITICO) return "text-red-500";
-  if (qty <= LIMIAR_BAIXO) return "text-amber-500";
-  return "text-emerald-500";
+interface Filters {
+  search: string;
+  codigo: string;
+  marca: string;
+  categoria: string;
+  status: string;
 }
 
-function StockBadge({ qty }: { qty: number }) {
-  if (qty <= 0) return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400">Sem Estoque</span>;
-  if (qty <= LIMIAR_CRITICO) return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/10 text-red-600 dark:text-red-400">Crítico</span>;
-  if (qty <= LIMIAR_BAIXO) return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400">Baixo</span>;
-  return <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">Normal</span>;
-}
+const emptyFilters: Filters = { search: "", codigo: "", marca: "", categoria: "", status: "" };
+
+const CHART_COLORS = {
+  indigo: "#6366f1",
+  amber: "#f59e0b",
+  rose: "#f43f5e",
+  emerald: "#10b981",
+};
+
+const PIE_COLORS = [CHART_COLORS.rose, CHART_COLORS.amber, CHART_COLORS.emerald];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-background border border-border rounded-lg shadow-lg p-3 text-sm">
-      <p className="font-medium mb-1 truncate max-w-[200px]">{label}</p>
+      <p className="font-medium mb-1 truncate max-w-[220px]">{label}</p>
       {payload.map((p: any, i: number) => (
-        <p key={i} style={{ color: p.color }}>{p.name}: {Number(p.value).toLocaleString("pt-BR")}</p>
+        <p key={i} style={{ color: p.color }}>
+          {p.name}: {Number(p.value).toLocaleString("pt-BR")}
+        </p>
       ))}
     </div>
   );
 };
 
-export default function Estoque() {
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(0);
+function Pagination({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  onPageSizeChange: (s: number) => void;
+}) {
+  if (total === 0) return null;
 
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    setPage(0);
-    clearTimeout((window as any)._searchTimeout);
-    (window as any)._searchTimeout = setTimeout(() => setDebouncedSearch(value), 400);
+  const maxVisiblePages = 5;
+  let startPage = Math.max(0, page - Math.floor(maxVisiblePages / 2));
+  const endPage = Math.min(totalPages, startPage + maxVisiblePages);
+  if (endPage - startPage < maxVisiblePages) startPage = Math.max(0, endPage - maxVisiblePages);
+  const pages = Array.from({ length: endPage - startPage }, (_, i) => startPage + i);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t bg-muted/10">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">Itens por página:</span>
+        <Select value={String(pageSize)} onValueChange={v => { onPageSizeChange(Number(v)); onPageChange(0); }}>
+          <SelectTrigger className="w-[70px] h-7 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAGE_SIZE_OPTIONS.map(s => (
+              <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-xs text-muted-foreground ml-2">
+          {total.toLocaleString("pt-BR")} {total === 1 ? "produto" : "produtos"}
+        </span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button
+          variant="outline" size="sm" className="h-7 w-7 p-0"
+          onClick={() => onPageChange(0)}
+          disabled={page === 0}
+        >
+          <span className="text-xs">1</span>
+        </Button>
+        <Button
+          variant="outline" size="sm" className="h-7 w-7 p-0"
+          onClick={() => onPageChange(Math.max(0, page - 1))}
+          disabled={page === 0}
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </Button>
+        {pages.map(p => (
+          <Button
+            key={p}
+            variant={p === page ? "default" : "outline"}
+            size="sm"
+            className="h-7 w-7 p-0 text-xs"
+            onClick={() => onPageChange(p)}
+          >
+            {p + 1}
+          </Button>
+        ))}
+        <Button
+          variant="outline" size="sm" className="h-7 w-7 p-0"
+          onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
+          disabled={page >= totalPages - 1}
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+        {totalPages > 1 && (
+          <Button
+            variant="outline" size="sm" className="h-7 px-2 p-0 text-xs"
+            onClick={() => onPageChange(totalPages - 1)}
+            disabled={page >= totalPages - 1}
+          >
+            {totalPages}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FilterBar({
+  applied,
+  onApply,
+  onClear,
+  marcas,
+  categorias,
+  showStatus,
+}: {
+  applied: Filters;
+  onApply: (f: Filters) => void;
+  onClear: () => void;
+  marcas: string[];
+  categorias: string[];
+  showStatus?: boolean;
+}) {
+  const [draft, setDraft] = useState<Filters>(applied);
+
+  const update = (partial: Partial<Filters>) => setDraft(prev => ({ ...prev, ...partial }));
+
+  const handleApply = () => onApply(draft);
+
+  const handleClear = () => {
+    setDraft(emptyFilters);
+    onClear();
   };
 
-  // Usa os novos endpoints que calculam estoque a partir das vendas
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleApply();
+  };
+
+  const hasApplied = applied.search || applied.codigo || applied.marca || applied.categoria || applied.status;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b bg-muted/5">
+      <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Buscar produto..."
+          value={draft.search}
+          onChange={e => update({ search: e.target.value })}
+          onKeyDown={handleKeyDown}
+          className="pl-8 w-44 h-8 text-xs"
+        />
+      </div>
+      <Input
+        placeholder="Código"
+        value={draft.codigo}
+        onChange={e => update({ codigo: e.target.value })}
+        onKeyDown={handleKeyDown}
+        className="w-24 h-8 text-xs"
+      />
+      <Select value={draft.marca || "_all"} onValueChange={v => update({ marca: v === "_all" ? "" : v })}>
+        <SelectTrigger className="w-36 h-8 text-xs">
+          <SelectValue placeholder="Marca" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="_all">Todas as marcas</SelectItem>
+          {marcas.map(m => (
+            <SelectItem key={m} value={m}>{m}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={draft.categoria || "_all"} onValueChange={v => update({ categoria: v === "_all" ? "" : v })}>
+        <SelectTrigger className="w-36 h-8 text-xs">
+          <SelectValue placeholder="Categoria" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="_all">Todas as categorias</SelectItem>
+          {categorias.map(c => (
+            <SelectItem key={c} value={c}>{c}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {showStatus && (
+        <Select value={draft.status || "_all"} onValueChange={v => update({ status: v === "_all" ? "" : v })}>
+          <SelectTrigger className="w-36 h-8 text-xs">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="_all">Todos</SelectItem>
+            <SelectItem value="semEstoque">Sem Estoque</SelectItem>
+            <SelectItem value="emAtencao">Em Atenção</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+      <Button size="sm" className="h-8 px-3 text-xs" onClick={handleApply}>
+        <Filter className="h-3.5 w-3.5 mr-1" /> Filtrar
+      </Button>
+      {hasApplied && (
+        <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-muted-foreground" onClick={handleClear}>
+          <X className="h-3.5 w-3.5 mr-1" /> Limpar
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function SkeletonRows({ cols }: { cols: number }) {
+  return (
+    <>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <tr key={i}>
+          {Array.from({ length: cols }).map((_, j) => (
+            <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+export default function Estoque() {
+  const [activeTab, setActiveTab] = useState("visualizacao");
+
+  const [semEstoquePage, setSemEstoquePage] = useState(0);
+  const [semEstoquePageSize, setSemEstoquePageSize] = useState(25);
+  const [semEstoqueFilters, setSemEstoqueFilters] = useState<Filters>(emptyFilters);
+
+  const [emAtencaoPage, setEmAtencaoPage] = useState(0);
+  const [emAtencaoPageSize, setEmAtencaoPageSize] = useState(25);
+  const [emAtencaoFilters, setEmAtencaoFilters] = useState<Filters>(emptyFilters);
+
+  const [todosPage, setTodosPage] = useState(0);
+  const [todosPageSize, setTodosPageSize] = useState(25);
+  const [todosFilters, setTodosFilters] = useState<Filters>(emptyFilters);
+
   const { data: resumo } = trpc.estoque.getResumo.useQuery();
-  const { data: estoqueBaixo } = trpc.estoque.getBaixo.useQuery();
-  const { data: estoquePaginado, isLoading } = trpc.estoque.getPaginado.useQuery({
-    limit: ITEMS_PER_PAGE,
-    offset: page * ITEMS_PER_PAGE,
-    search: debouncedSearch || undefined,
+  const { data: filterOptions } = trpc.estoque.getFilterOptions.useQuery();
+  const { data: topAtencaoData } = trpc.estoque.getEmAtencao.useQuery({ limit: 10, orderBy: "vendas3m" });
+  const { data: porCategoriaData } = trpc.estoque.getPorCategoria.useQuery();
+
+  const marcas = filterOptions?.marcas ?? [];
+  const categorias = filterOptions?.categorias ?? [];
+
+  const buildParams = (filters: Filters, page: number, pageSize: number) => ({
+    limit: pageSize,
+    offset: page * pageSize,
+    search: filters.search || undefined,
+    codigo: filters.codigo || undefined,
+    marca: filters.marca || undefined,
+    categoria: filters.categoria || undefined,
   });
 
-  const totalPages = Math.ceil((estoquePaginado?.total || 0) / ITEMS_PER_PAGE);
+  const { data: semEstoqueData, isLoading: semEstoqueLoading } = trpc.estoque.getSemEstoque.useQuery(
+    buildParams(semEstoqueFilters, semEstoquePage, semEstoquePageSize)
+  );
 
-  // Chart data - top 10 produtos com menor estoque (excluindo zerados)
-  const chartCritico = (estoqueBaixo || [])
-    .filter((p: any) => Number(p.estoque) > 0)
-    .slice(0, 10)
-    .map((p: any) => ({
-      produto: (p.produto || p.nome || String(p.codProduto) || "—").slice(0, 20),
-      Estoque: Number(p.estoque ?? 0),
-    }));
+  const { data: emAtencaoData, isLoading: emAtencaoLoading } = trpc.estoque.getEmAtencao.useQuery(
+    buildParams(emAtencaoFilters, emAtencaoPage, emAtencaoPageSize)
+  );
+
+  const { data: todosData, isLoading: todosLoading } = trpc.estoque.getPaginado.useQuery({
+    ...buildParams(todosFilters, todosPage, todosPageSize),
+    status: (todosFilters.status as 'semEstoque' | 'emAtencao') || undefined,
+  });
+
+  const applyFilters = (
+    setter: React.Dispatch<React.SetStateAction<Filters>>,
+    pageSetter: React.Dispatch<React.SetStateAction<number>>,
+  ) => (filters: Filters) => {
+    setter(filters);
+    pageSetter(0);
+  };
+
+  const clearFilters = (
+    setter: React.Dispatch<React.SetStateAction<Filters>>,
+    pageSetter: React.Dispatch<React.SetStateAction<number>>,
+  ) => () => {
+    setter(emptyFilters);
+    pageSetter(0);
+  };
 
   return (
     <div className="space-y-5">
       <PageHeader
         icon={Warehouse}
-        title="Monitor de Estoque"
-        description="Estoque calculado com base nas vendas (quantidade vendida − devolvida por produto)"
+        title="Análises de Estoque"
+        description="Indicadores de estoque considerando apenas produtos ativos"
         accent="amber"
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           {
             label: "Total em Estoque",
@@ -106,18 +346,9 @@ export default function Estoque() {
             valueClass: "text-rose-500",
           },
           {
-            label: "Estoque Crítico",
-            value: resumo?.critico ?? 0,
-            Icon: TrendingDown,
-            color: "text-red-500",
-            bg: "bg-red-500/10",
-            bar: "bg-red-500",
-            valueClass: "text-red-500",
-          },
-          {
-            label: "Estoque Baixo",
-            value: resumo?.baixo ?? 0,
-            Icon: AlertTriangle,
+            label: "Em Atenção",
+            value: resumo?.emAtencao ?? 0,
+            Icon: Eye,
             color: "text-amber-500",
             bg: "bg-amber-500/10",
             bar: "bg-amber-500",
@@ -139,79 +370,29 @@ export default function Estoque() {
         ))}
       </div>
 
-      <Tabs defaultValue="alertas">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
-          <TabsTrigger value="alertas">Alertas Críticos</TabsTrigger>
+          <TabsTrigger value="visualizacao">Visualização</TabsTrigger>
+          <TabsTrigger value="semEstoque">Sem Estoque</TabsTrigger>
+          <TabsTrigger value="emAtencao">Em Atenção</TabsTrigger>
           <TabsTrigger value="todos">Todos os Produtos</TabsTrigger>
-          <TabsTrigger value="grafico">Visualização</TabsTrigger>
         </TabsList>
 
-        {/* Aba: Alertas Críticos */}
-        <TabsContent value="alertas">
+        {/* Aba: Sem Estoque */}
+        <TabsContent value="semEstoque">
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-0">
               <CardTitle className="text-sm font-semibold">
-                Produtos com Estoque Crítico ou Zerado
-                <span className="ml-2 text-xs font-normal text-muted-foreground">(≤ {LIMIAR_BAIXO} unidades)</span>
+                Produtos Ativos sem Estoque
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              {!estoqueBaixo?.length ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p>Nenhum produto com estoque crítico</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Código</th>
-                        <th>Produto</th>
-                        <th>Marca</th>
-                        <th>Categoria</th>
-                        <th className="text-right">Estoque</th>
-                        <th className="text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {estoqueBaixo.map((p: any, i: number) => (
-                        <tr key={i}>
-                          <td className="font-mono text-xs text-muted-foreground">{p.codProduto}</td>
-                          <td className="font-medium max-w-[250px] truncate">{p.produto || p.nome || "—"}</td>
-                          <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
-                          <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
-                          <td className={`text-right font-bold ${getStockColor(Number(p.estoque ?? 0))}`}>
-                            {Number(p.estoque ?? 0).toLocaleString("pt-BR")}
-                          </td>
-                          <td className="text-center">
-                            <StockBadge qty={Number(p.estoque ?? 0)} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Aba: Todos os Produtos */}
-        <TabsContent value="todos">
-          <Card>
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-semibold">Todos os Produtos com Estoque</CardTitle>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar produto..."
-                  value={search}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="pl-9 w-52 h-8 text-sm"
-                />
-              </div>
-            </CardHeader>
+            <FilterBar
+              applied={semEstoqueFilters}
+              onApply={applyFilters(setSemEstoqueFilters, setSemEstoquePage)}
+              onClear={clearFilters(setSemEstoqueFilters, setSemEstoquePage)}
+              marcas={marcas}
+              categorias={categorias}
+            />
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="data-table">
@@ -222,37 +403,101 @@ export default function Estoque() {
                       <th>Marca</th>
                       <th>Categoria</th>
                       <th className="text-right">Estoque</th>
-                      <th className="text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {isLoading ? (
-                      Array.from({ length: 8 }).map((_, i) => (
-                        <tr key={i}>
-                          {Array.from({ length: 6 }).map((_, j) => (
-                            <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-full" /></td>
-                          ))}
-                        </tr>
-                      ))
-                    ) : !estoquePaginado?.data?.length ? (
+                    {semEstoqueLoading ? (
+                      <SkeletonRows cols={5} />
+                    ) : !semEstoqueData?.data?.length ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
+                        <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
                           <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                          <p>Nenhum produto encontrado</p>
+                          <p>Nenhum produto ativo com estoque zerado</p>
                         </td>
                       </tr>
                     ) : (
-                      estoquePaginado.data.map((p: any, i: number) => (
+                      semEstoqueData.data.map((p: any, i: number) => (
                         <tr key={i}>
                           <td className="font-mono text-xs text-muted-foreground">{p.codProduto}</td>
-                          <td className="font-medium max-w-[220px] truncate">{p.nome || "—"}</td>
+                          <td className="font-medium max-w-[250px] truncate">{p.nome || "—"}</td>
                           <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
                           <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
-                          <td className={`text-right font-bold ${getStockColor(Number(p.estoque ?? 0))}`}>
-                            {Number(p.estoque ?? 0).toLocaleString("pt-BR")}
+                          <td className="text-right font-bold text-rose-500">0</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={semEstoquePage}
+                totalPages={Math.ceil((semEstoqueData?.total || 0) / semEstoquePageSize)}
+                total={semEstoqueData?.total || 0}
+                pageSize={semEstoquePageSize}
+                onPageChange={setSemEstoquePage}
+                onPageSizeChange={setSemEstoquePageSize}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aba: Em Atenção */}
+        <TabsContent value="emAtencao">
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-sm font-semibold">
+                Produtos em Atenção
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  Estoque abaixo da média de vendas dos últimos 3 meses
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <FilterBar
+              applied={emAtencaoFilters}
+              onApply={applyFilters(setEmAtencaoFilters, setEmAtencaoPage)}
+              onClear={clearFilters(setEmAtencaoFilters, setEmAtencaoPage)}
+              marcas={marcas}
+              categorias={categorias}
+            />
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Produto</th>
+                      <th>Marca</th>
+                      <th>Categoria</th>
+                      <th className="text-right">Estoque Atual</th>
+                      <th className="text-right">Vendido (3m)</th>
+                      <th className="text-right">Média Mensal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emAtencaoLoading ? (
+                      <SkeletonRows cols={7} />
+                    ) : !emAtencaoData?.data?.length ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                          <Eye className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          <p>Nenhum produto em atenção</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      emAtencaoData.data.map((p: any, i: number) => (
+                        <tr key={i}>
+                          <td className="font-mono text-xs text-muted-foreground">{p.codProduto}</td>
+                          <td className="font-medium max-w-[200px] truncate">{p.nome || "—"}</td>
+                          <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
+                          <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
+                          <td className="text-right font-bold text-amber-500">
+                            {Number(p.estoqueAtual ?? 0).toLocaleString("pt-BR")}
                           </td>
-                          <td className="text-center">
-                            <StockBadge qty={Number(p.estoque ?? 0)} />
+                          <td className="text-right text-muted-foreground">
+                            {Number(p.totalVendido3Meses ?? 0).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="text-right text-muted-foreground">
+                            {Number(p.mediaVendasMensal ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
                           </td>
                         </tr>
                       ))
@@ -260,100 +505,202 @@ export default function Estoque() {
                   </tbody>
                 </table>
               </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/10">
-                  <p className="text-xs text-muted-foreground">
-                    Página {page + 1} de {totalPages} &mdash; {estoquePaginado?.total?.toLocaleString("pt-BR")} produtos
-                  </p>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline" size="sm" className="h-7 w-7 p-0"
-                      onClick={() => setPage(p => Math.max(0, p - 1))}
-                      disabled={page === 0}
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="outline" size="sm" className="h-7 w-7 p-0"
-                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                      disabled={page >= totalPages - 1}
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                page={emAtencaoPage}
+                totalPages={Math.ceil((emAtencaoData?.total || 0) / emAtencaoPageSize)}
+                total={emAtencaoData?.total || 0}
+                pageSize={emAtencaoPageSize}
+                onPageChange={setEmAtencaoPage}
+                onPageSizeChange={setEmAtencaoPageSize}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Aba: Todos os Produtos */}
+        <TabsContent value="todos">
+          <Card>
+            <CardHeader className="pb-0">
+              <CardTitle className="text-sm font-semibold">Todos os Produtos Ativos</CardTitle>
+            </CardHeader>
+            <FilterBar
+              applied={todosFilters}
+              onApply={applyFilters(setTodosFilters, setTodosPage)}
+              onClear={clearFilters(setTodosFilters, setTodosPage)}
+              marcas={marcas}
+              categorias={categorias}
+              showStatus
+            />
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Produto</th>
+                      <th>Marca</th>
+                      <th>Categoria</th>
+                      <th className="text-right">Estoque</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {todosLoading ? (
+                      <SkeletonRows cols={5} />
+                    ) : !todosData?.data?.length ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                          <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          <p>Nenhum produto encontrado</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      todosData.data.map((p: any, i: number) => (
+                        <tr key={i}>
+                          <td className="font-mono text-xs text-muted-foreground">{p.codProduto}</td>
+                          <td className="font-medium max-w-[220px] truncate">{p.nome || "—"}</td>
+                          <td className="text-muted-foreground text-xs">{p.marca || "—"}</td>
+                          <td className="text-muted-foreground text-xs">{p.categoria || "—"}</td>
+                          <td className={`text-right font-bold ${Number(p.estoque ?? 0) === 0 ? "text-rose-500" : "text-emerald-500"}`}>
+                            {Number(p.estoque ?? 0).toLocaleString("pt-BR")}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={todosPage}
+                totalPages={Math.ceil((todosData?.total || 0) / todosPageSize)}
+                total={todosData?.total || 0}
+                pageSize={todosPageSize}
+                onPageChange={setTodosPage}
+                onPageSizeChange={setTodosPageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Aba: Visualização */}
-        <TabsContent value="grafico">
+        <TabsContent value="visualizacao">
           <div className="grid grid-cols-1 gap-4">
+            {/* Top 10 Produtos em Atenção — Estoque vs Vendas */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold">
-                  Top 10 Produtos com Menor Estoque
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">(excluindo zerados)</span>
+                  Top 10 Produtos em Atenção
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">Estoque Atual vs Média de venda (3 meses)</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {!chartCritico.length ? (
+                {!topAtencaoData?.data?.length ? (
                   <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
                     <BarChart3 className="h-8 w-8 mr-2 opacity-30" /> Nenhum dado disponível
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={320}>
-                    <BarChart data={chartCritico} layout="vertical" margin={{ left: 10, right: 20 }}>
+                  <ResponsiveContainer width="100%" height={Math.max(320, (topAtencaoData.data.length) * 40)}>
+                    <BarChart
+                      data={topAtencaoData.data.map((p: any) => ({
+                        produto: (p.nome || String(p.codProduto) || "—").slice(0, 25),
+                        "Estoque Atual": Number(p.estoqueAtual ?? 0),
+                        "Média Venda (3m)": Number(p.mediaVendasMensal ?? 0),
+                      }))}
+                      layout="vertical"
+                      margin={{ left: 10, right: 20 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis type="number" tick={{ fontSize: 11 }} />
-                      <YAxis type="category" dataKey="produto" tick={{ fontSize: 10 }} width={140} />
+                      <YAxis type="category" dataKey="produto" tick={{ fontSize: 10 }} width={160} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="Estoque" radius={[0, 4, 4, 0]}>
-                        {chartCritico.map((entry: any, i: number) => (
-                          <Cell
-                            key={i}
-                            fill={
-                              entry.Estoque <= 0 ? "#f43f5e"
-                              : entry.Estoque <= LIMIAR_CRITICO ? "#ef4444"
-                              : entry.Estoque <= LIMIAR_BAIXO ? "#f59e0b"
-                              : "#6366f1"
-                            }
-                          />
-                        ))}
-                      </Bar>
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="Estoque Atual" fill={CHART_COLORS.indigo} radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="Média Venda (3m)" fill={CHART_COLORS.amber} radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>
             </Card>
 
-            {/* Resumo por status */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Distribuição por Nível de Estoque</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: "Sem Estoque (= 0)", value: resumo?.semEstoque ?? 0, color: "bg-rose-500" },
-                    { label: `Crítico (1–${LIMIAR_CRITICO})`, value: resumo?.critico ?? 0, color: "bg-red-500" },
-                    { label: `Baixo (${LIMIAR_CRITICO + 1}–${LIMIAR_BAIXO})`, value: resumo?.baixo ?? 0, color: "bg-amber-500" },
-                    {
-                      label: `Normal (> ${LIMIAR_BAIXO})`,
-                      value: (estoquePaginado?.total ?? 0) - (resumo?.semEstoque ?? 0) - (resumo?.critico ?? 0) - (resumo?.baixo ?? 0),
-                      color: "bg-emerald-500",
-                    },
-                  ].map(item => (
-                    <div key={item.label} className="rounded-lg border bg-card p-3">
-                      <div className={`h-1 w-8 rounded-full ${item.color} mb-2`} />
-                      <p className="text-xs text-muted-foreground">{item.label}</p>
-                      <p className="text-lg font-bold mt-0.5">{Number(item.value).toLocaleString("pt-BR")}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Distribuição de Status */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">Distribuição de Status de Estoque</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!resumo?.totalProdutos ? (
+                    <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                      <BarChart3 className="h-8 w-8 mr-2 opacity-30" /> Nenhum dado disponível
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  ) : (() => {
+                    const normal = Math.max(0, resumo.totalProdutos - resumo.semEstoque - resumo.emAtencao);
+                    const pieData = [
+                      { name: "Sem Estoque", value: resumo.semEstoque },
+                      { name: "Em Atenção", value: resumo.emAtencao },
+                      { name: "Normal", value: normal },
+                    ].filter(d => d.value > 0);
+                    return (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={3}
+                            dataKey="value"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
+                          >
+                            {pieData.map((_, i) => (
+                              <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<CustomTooltip />} />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* Top 10 Categorias com Problemas */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">
+                    Top 10 Categorias com Problemas de Estoque
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!porCategoriaData?.length ? (
+                    <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                      <BarChart3 className="h-8 w-8 mr-2 opacity-30" /> Nenhum dado disponível
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart
+                        data={porCategoriaData.map((c: any) => ({
+                          categoria: (c.categoria || "—").slice(0, 18),
+                          "Sem Estoque": Number(c.semEstoque ?? 0),
+                          "Em Atenção": Number(c.emAtencao ?? 0),
+                        }))}
+                        margin={{ left: 0, right: 10 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="categoria" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend wrapperStyle={{ fontSize: 12 }} />
+                        <Bar dataKey="Sem Estoque" stackId="a" fill={CHART_COLORS.rose} radius={[0, 0, 0, 0]} />
+                        <Bar dataKey="Em Atenção" stackId="a" fill={CHART_COLORS.amber} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
       </Tabs>

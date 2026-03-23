@@ -496,7 +496,8 @@ export default function Produtos() {
 }
 
 function EstoqueCriticoList() {
-  const { data: baixo, isLoading } = trpc.estoque.getBaixo.useQuery();
+  const { data: result, isLoading } = trpc.estoque.getSemEstoque.useQuery({ limit: 10 });
+  const items = result?.data;
 
   if (isLoading)
     return (
@@ -506,28 +507,28 @@ function EstoqueCriticoList() {
         ))}
       </div>
     );
-  if (!baixo?.length)
+  if (!items?.length)
     return (
       <p className="text-sm text-muted-foreground text-center py-8">
-        Nenhum produto com estoque crítico
+        Nenhum produto ativo sem estoque
       </p>
     );
 
   return (
     <div className="space-y-2">
-      {baixo.slice(0, 10).map((p: any, i: number) => (
+      {items.map((p: any, i: number) => (
         <div
           key={i}
           className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0"
         >
           <div>
             <p className="text-sm font-medium truncate max-w-[200px]">
-              {p.produto || p.nome || p.codProduto}
+              {p.nome || p.codProduto}
             </p>
             <p className="text-xs text-muted-foreground">{p.codProduto}</p>
           </div>
           <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400">
-            {p.estoque ?? 0} un
+            0 un
           </span>
         </div>
       ))}

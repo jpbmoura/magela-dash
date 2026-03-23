@@ -15,7 +15,8 @@ import {
   getQuantidadeVendas,
   getTicketMedio,
   getTotalEstoque,
-  getEstoqueBaixo,
+  getProdutosSemEstoque,
+  getProdutosEmAtencao,
   getAlertas,
   getAlertasNaoLidos,
   markAlertaAsRead,
@@ -41,6 +42,8 @@ import {
   getProdutosPorStatusEstoque,
   getEstoqueResumo,
   getEstoquePaginado,
+  getEstoqueFilterOptions,
+  getEstoquePorCategoria,
   getClientesKPIs,
   getRankingClientes,
   getTopClientesPorPedidos,
@@ -143,7 +146,7 @@ export const appRouter = router({
           getProdutosCount(),
           getEquipeCount(),
           getTotalEstoque(),
-          getEstoqueBaixo(),
+          getProdutosSemEstoque(),
         ]);
         return {
           totalVendas,
@@ -153,7 +156,7 @@ export const appRouter = router({
           produtosCount,
           equipCount,
           totalEstoque,
-          estoqueAlerts: estoqueAlerts.length,
+          estoqueAlerts: estoqueAlerts.total,
         };
       }),
 
@@ -324,18 +327,42 @@ export const appRouter = router({
 
   // ============= ESTOQUE PROCEDURES =============
   estoque: router({
-    getBaixo: publicProcedure.query(async () => getEstoqueBaixo()),
+    getFilterOptions: publicProcedure.query(async () => getEstoqueFilterOptions()),
+    getSemEstoque: publicProcedure
+      .input(z.object({
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+        search: z.string().optional(),
+        codigo: z.string().optional(),
+        marca: z.string().optional(),
+        categoria: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => getProdutosSemEstoque(input ?? {})),
+    getEmAtencao: publicProcedure
+      .input(z.object({
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+        search: z.string().optional(),
+        codigo: z.string().optional(),
+        marca: z.string().optional(),
+        categoria: z.string().optional(),
+        orderBy: z.enum(['gap', 'vendas3m']).optional(),
+      }).optional())
+      .query(async ({ input }) => getProdutosEmAtencao(input ?? {})),
     getTotal: publicProcedure.query(async () => getTotalEstoque()),
     getResumo: publicProcedure.query(async () => getEstoqueResumo()),
+    getPorCategoria: publicProcedure.query(async () => getEstoquePorCategoria()),
     getPaginado: publicProcedure
       .input(z.object({
         limit: z.number().optional(),
         offset: z.number().optional(),
         search: z.string().optional(),
+        codigo: z.string().optional(),
+        marca: z.string().optional(),
+        categoria: z.string().optional(),
+        status: z.enum(['semEstoque', 'emAtencao']).optional(),
       }).optional())
-      .query(async ({ input }) =>
-        getEstoquePaginado(input?.limit || 50, input?.offset || 0, input?.search)
-      ),
+      .query(async ({ input }) => getEstoquePaginado(input ?? {})),
   }),
 
   // ============= VENDAS PROCEDURES =============
