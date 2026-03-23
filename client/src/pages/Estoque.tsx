@@ -256,6 +256,9 @@ function SkeletonRows({ cols }: { cols: number }) {
 
 export default function Estoque() {
   const [activeTab, setActiveTab] = useState("visualizacao");
+  const [semEstoqueOrderBy, setSemEstoqueOrderBy] = useState<"estoque">("estoque");
+  const [emAtencaoOrderBy, setEmAtencaoOrderBy] = useState<"estoqueAtual" | "totalVendido3Meses" | "mediaVendasMensal">("estoqueAtual");
+  const [todosOrderBy, setTodosOrderBy] = useState<"estoque">("estoque");
 
   const [semEstoquePage, setSemEstoquePage] = useState(0);
   const [semEstoquePageSize, setSemEstoquePageSize] = useState(25);
@@ -287,16 +290,17 @@ export default function Estoque() {
   });
 
   const { data: semEstoqueData, isLoading: semEstoqueLoading } = trpc.estoque.getSemEstoque.useQuery(
-    buildParams(semEstoqueFilters, semEstoquePage, semEstoquePageSize)
+    { ...buildParams(semEstoqueFilters, semEstoquePage, semEstoquePageSize), orderBy: semEstoqueOrderBy }
   );
 
   const { data: emAtencaoData, isLoading: emAtencaoLoading } = trpc.estoque.getEmAtencao.useQuery(
-    buildParams(emAtencaoFilters, emAtencaoPage, emAtencaoPageSize)
+    { ...buildParams(emAtencaoFilters, emAtencaoPage, emAtencaoPageSize), orderBy: emAtencaoOrderBy }
   );
 
   const { data: todosData, isLoading: todosLoading } = trpc.estoque.getPaginado.useQuery({
     ...buildParams(todosFilters, todosPage, todosPageSize),
     status: (todosFilters.status as 'semEstoque' | 'emAtencao') || undefined,
+    orderBy: todosOrderBy,
   });
 
   const applyFilters = (
@@ -394,6 +398,17 @@ export default function Estoque() {
               categorias={categorias}
             />
             <CardContent className="p-0">
+              <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Ordenar por:</span>
+                <Select value={semEstoqueOrderBy} onValueChange={(v: "estoque") => setSemEstoqueOrderBy(v)}>
+                  <SelectTrigger className="w-40 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="estoque">Por Estoque</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
@@ -460,6 +475,22 @@ export default function Estoque() {
               categorias={categorias}
             />
             <CardContent className="p-0">
+              <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Ordenar por:</span>
+                <Select
+                  value={emAtencaoOrderBy}
+                  onValueChange={(v: "estoqueAtual" | "totalVendido3Meses" | "mediaVendasMensal") => setEmAtencaoOrderBy(v)}
+                >
+                  <SelectTrigger className="w-48 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="estoqueAtual">Estoque atual</SelectItem>
+                    <SelectItem value="totalVendido3Meses">Vendido 3M</SelectItem>
+                    <SelectItem value="mediaVendasMensal">Média mensal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
@@ -532,6 +563,17 @@ export default function Estoque() {
               showStatus
             />
             <CardContent className="p-0">
+              <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Ordenar por:</span>
+                <Select value={todosOrderBy} onValueChange={(v: "estoque") => setTodosOrderBy(v)}>
+                  <SelectTrigger className="w-40 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="estoque">Estoque</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>

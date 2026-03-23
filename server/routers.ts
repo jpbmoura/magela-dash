@@ -336,6 +336,7 @@ export const appRouter = router({
         codigo: z.string().optional(),
         marca: z.string().optional(),
         categoria: z.string().optional(),
+        orderBy: z.enum(['estoque']).optional(),
       }).optional())
       .query(async ({ input }) => getProdutosSemEstoque(input ?? {})),
     getEmAtencao: publicProcedure
@@ -346,7 +347,7 @@ export const appRouter = router({
         codigo: z.string().optional(),
         marca: z.string().optional(),
         categoria: z.string().optional(),
-        orderBy: z.enum(['gap', 'vendas3m']).optional(),
+        orderBy: z.enum(['gap', 'vendas3m', 'estoqueAtual', 'totalVendido3Meses', 'mediaVendasMensal']).optional(),
       }).optional())
       .query(async ({ input }) => getProdutosEmAtencao(input ?? {})),
     getTotal: publicProcedure.query(async () => getTotalEstoque()),
@@ -361,6 +362,7 @@ export const appRouter = router({
         marca: z.string().optional(),
         categoria: z.string().optional(),
         status: z.enum(['semEstoque', 'emAtencao']).optional(),
+        orderBy: z.enum(['estoque']).optional(),
       }).optional())
       .query(async ({ input }) => getEstoquePaginado(input ?? {})),
   }),

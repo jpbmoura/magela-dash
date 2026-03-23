@@ -235,7 +235,7 @@ interface EstoqueFilterParams {
   codigo?: string;
   marca?: string;
   categoria?: string;
-  orderBy?: 'gap' | 'vendas3m';
+  orderBy?: 'gap' | 'vendas3m' | 'estoque' | 'estoqueAtual' | 'totalVendido3Meses' | 'mediaVendasMensal';
 }
 
 function buildEstoqueFilters(alias: string, params: EstoqueFilterParams) {
@@ -266,6 +266,7 @@ export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
   const limit = params.limit || 50;
   const offset = params.offset || 0;
   const filters = buildEstoqueFilters('p', params);
+  const orderByClause = sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto  AS codProduto,
@@ -275,7 +276,7 @@ export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
       COALESCE(p.estoque_total, 0) AS estoque
     FROM produtos p
     WHERE p.ativo = 'ATIVO' AND COALESCE(p.estoque_total, 0) = 0 AND ${filters}
-    ORDER BY p.nome ASC
+    ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
   `);
   const countRows = await db.execute(sql`
@@ -295,9 +296,19 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
   const limit = params.limit || 50;
   const offset = params.offset || 0;
   const filters = buildEstoqueFilters('p', params);
-  const orderByClause = params.orderBy === 'vendas3m'
-    ? sql`COALESCE(v.total_vendido, 0) DESC`
-    : sql`(COALESCE(v.total_vendido, 0) / 3) - COALESCE(p.estoque_total, 0) DESC`;
+  const orderByClause = (() => {
+    switch (params.orderBy) {
+      case 'vendas3m':
+      case 'totalVendido3Meses':
+        return sql`COALESCE(v.total_vendido, 0) DESC`;
+      case 'mediaVendasMensal':
+        return sql`(COALESCE(v.total_vendido, 0) / 3) DESC`;
+      case 'estoqueAtual':
+        return sql`COALESCE(p.estoque_total, 0) ASC`;
+      default:
+        return sql`(COALESCE(v.total_vendido, 0) / 3) - COALESCE(p.estoque_total, 0) DESC`;
+    }
+  })();
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto                         AS codProduto,
@@ -449,6 +460,7 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
   } else if (params.status === 'emAtencao') {
     statusClause = sql`AND COALESCE(v.total_vendido, 0) > 0 AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)`;
   }
+  const orderByClause = sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
 
   const dataRows = await db.execute(sql`
     SELECT
@@ -460,7 +472,7 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
     FROM produtos p
     ${vendasJoin}
     WHERE p.ativo = 'ATIVO' AND ${filters} ${statusClause}
-    ORDER BY p.estoque_total ASC
+    ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
   `);
   const countRows = await db.execute(sql`
