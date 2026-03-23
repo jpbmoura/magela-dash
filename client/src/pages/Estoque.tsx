@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { Search, AlertTriangle, Package, Eye, ChevronLeft, ChevronRight, Warehouse, X, Filter, BarChart3 } from "lucide-react";
+import { Search, AlertTriangle, Package, Eye, ChevronLeft, ChevronRight, Warehouse, X, Filter, BarChart3, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -257,8 +257,11 @@ function SkeletonRows({ cols }: { cols: number }) {
 export default function Estoque() {
   const [activeTab, setActiveTab] = useState("visualizacao");
   const [semEstoqueOrderBy, setSemEstoqueOrderBy] = useState<"estoque">("estoque");
+  const [semEstoqueOrderDir, setSemEstoqueOrderDir] = useState<"asc" | "desc">("asc");
   const [emAtencaoOrderBy, setEmAtencaoOrderBy] = useState<"estoqueAtual" | "totalVendido3Meses" | "mediaVendasMensal">("estoqueAtual");
+  const [emAtencaoOrderDir, setEmAtencaoOrderDir] = useState<"asc" | "desc">("asc");
   const [todosOrderBy, setTodosOrderBy] = useState<"estoque">("estoque");
+  const [todosOrderDir, setTodosOrderDir] = useState<"asc" | "desc">("asc");
 
   const [semEstoquePage, setSemEstoquePage] = useState(0);
   const [semEstoquePageSize, setSemEstoquePageSize] = useState(25);
@@ -274,7 +277,12 @@ export default function Estoque() {
 
   const { data: resumo } = trpc.estoque.getResumo.useQuery();
   const { data: filterOptions } = trpc.estoque.getFilterOptions.useQuery();
-  const { data: topAtencaoData } = trpc.estoque.getEmAtencao.useQuery({ limit: 10, orderBy: "vendas3m" });
+  const { data: topAtencaoData } = trpc.estoque.getEmAtencao.useQuery({
+    limit: 10,
+    orderBy: "mediaVendasMensal",
+    orderDir: "desc",
+    excludeZeroStock: true,
+  });
   const { data: porCategoriaData } = trpc.estoque.getPorCategoria.useQuery();
 
   const marcas = filterOptions?.marcas ?? [];
@@ -290,17 +298,18 @@ export default function Estoque() {
   });
 
   const { data: semEstoqueData, isLoading: semEstoqueLoading } = trpc.estoque.getSemEstoque.useQuery(
-    { ...buildParams(semEstoqueFilters, semEstoquePage, semEstoquePageSize), orderBy: semEstoqueOrderBy }
+    { ...buildParams(semEstoqueFilters, semEstoquePage, semEstoquePageSize), orderBy: semEstoqueOrderBy, orderDir: semEstoqueOrderDir }
   );
 
   const { data: emAtencaoData, isLoading: emAtencaoLoading } = trpc.estoque.getEmAtencao.useQuery(
-    { ...buildParams(emAtencaoFilters, emAtencaoPage, emAtencaoPageSize), orderBy: emAtencaoOrderBy }
+    { ...buildParams(emAtencaoFilters, emAtencaoPage, emAtencaoPageSize), orderBy: emAtencaoOrderBy, orderDir: emAtencaoOrderDir }
   );
 
   const { data: todosData, isLoading: todosLoading } = trpc.estoque.getPaginado.useQuery({
     ...buildParams(todosFilters, todosPage, todosPageSize),
     status: (todosFilters.status as 'semEstoque' | 'emAtencao') || undefined,
     orderBy: todosOrderBy,
+    orderDir: todosOrderDir,
   });
 
   const applyFilters = (
@@ -317,6 +326,13 @@ export default function Estoque() {
   ) => () => {
     setter(emptyFilters);
     pageSetter(0);
+  };
+
+  const renderSortIcon = (isActive: boolean, dir: "asc" | "desc") => {
+    if (!isActive) return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    return dir === "asc"
+      ? <ArrowUp className="h-3.5 w-3.5 text-foreground" />
+      : <ArrowDown className="h-3.5 w-3.5 text-foreground" />;
   };
 
   return (
@@ -398,17 +414,6 @@ export default function Estoque() {
               categorias={categorias}
             />
             <CardContent className="p-0">
-              <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Ordenar por:</span>
-                <Select value={semEstoqueOrderBy} onValueChange={(v: "estoque") => setSemEstoqueOrderBy(v)}>
-                  <SelectTrigger className="w-40 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="estoque">Por Estoque</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
@@ -417,7 +422,20 @@ export default function Estoque() {
                       <th>Produto</th>
                       <th>Marca</th>
                       <th>Categoria</th>
-                      <th className="text-right">Estoque</th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setSemEstoquePage(0);
+                            setSemEstoqueOrderBy("estoque");
+                            setSemEstoqueOrderDir(prev => (semEstoqueOrderBy === "estoque" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Estoque
+                          {renderSortIcon(semEstoqueOrderBy === "estoque", semEstoqueOrderDir)}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -475,22 +493,6 @@ export default function Estoque() {
               categorias={categorias}
             />
             <CardContent className="p-0">
-              <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Ordenar por:</span>
-                <Select
-                  value={emAtencaoOrderBy}
-                  onValueChange={(v: "estoqueAtual" | "totalVendido3Meses" | "mediaVendasMensal") => setEmAtencaoOrderBy(v)}
-                >
-                  <SelectTrigger className="w-48 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="estoqueAtual">Estoque atual</SelectItem>
-                    <SelectItem value="totalVendido3Meses">Vendido 3M</SelectItem>
-                    <SelectItem value="mediaVendasMensal">Média mensal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
@@ -499,9 +501,48 @@ export default function Estoque() {
                       <th>Produto</th>
                       <th>Marca</th>
                       <th>Categoria</th>
-                      <th className="text-right">Estoque Atual</th>
-                      <th className="text-right">Vendido (3m)</th>
-                      <th className="text-right">Média Mensal</th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setEmAtencaoPage(0);
+                            setEmAtencaoOrderBy("estoqueAtual");
+                            setEmAtencaoOrderDir(prev => (emAtencaoOrderBy === "estoqueAtual" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Estoque Atual
+                          {renderSortIcon(emAtencaoOrderBy === "estoqueAtual", emAtencaoOrderDir)}
+                        </button>
+                      </th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setEmAtencaoPage(0);
+                            setEmAtencaoOrderBy("totalVendido3Meses");
+                            setEmAtencaoOrderDir(prev => (emAtencaoOrderBy === "totalVendido3Meses" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Vendido (3m)
+                          {renderSortIcon(emAtencaoOrderBy === "totalVendido3Meses", emAtencaoOrderDir)}
+                        </button>
+                      </th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setEmAtencaoPage(0);
+                            setEmAtencaoOrderBy("mediaVendasMensal");
+                            setEmAtencaoOrderDir(prev => (emAtencaoOrderBy === "mediaVendasMensal" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Média Mensal
+                          {renderSortIcon(emAtencaoOrderBy === "mediaVendasMensal", emAtencaoOrderDir)}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -563,17 +604,6 @@ export default function Estoque() {
               showStatus
             />
             <CardContent className="p-0">
-              <div className="px-4 py-2 border-b bg-muted/5 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Ordenar por:</span>
-                <Select value={todosOrderBy} onValueChange={(v: "estoque") => setTodosOrderBy(v)}>
-                  <SelectTrigger className="w-40 h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="estoque">Estoque</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
@@ -582,7 +612,20 @@ export default function Estoque() {
                       <th>Produto</th>
                       <th>Marca</th>
                       <th>Categoria</th>
-                      <th className="text-right">Estoque</th>
+                      <th className="text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 ml-auto"
+                          onClick={() => {
+                            setTodosPage(0);
+                            setTodosOrderBy("estoque");
+                            setTodosOrderDir(prev => (todosOrderBy === "estoque" ? (prev === "asc" ? "desc" : "asc") : "asc"));
+                          }}
+                        >
+                          Estoque
+                          {renderSortIcon(todosOrderBy === "estoque", todosOrderDir)}
+                        </button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>

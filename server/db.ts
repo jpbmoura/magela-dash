@@ -236,6 +236,8 @@ interface EstoqueFilterParams {
   marca?: string;
   categoria?: string;
   orderBy?: 'gap' | 'vendas3m' | 'estoque' | 'estoqueAtual' | 'totalVendido3Meses' | 'mediaVendasMensal';
+  orderDir?: 'asc' | 'desc';
+  excludeZeroStock?: boolean;
 }
 
 function buildEstoqueFilters(alias: string, params: EstoqueFilterParams) {
@@ -266,7 +268,9 @@ export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
   const limit = params.limit || 50;
   const offset = params.offset || 0;
   const filters = buildEstoqueFilters('p', params);
-  const orderByClause = sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
+  const orderByClause = params.orderDir === 'desc'
+    ? sql`COALESCE(p.estoque_total, 0) DESC, p.nome ASC`
+    : sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto  AS codProduto,
@@ -297,18 +301,20 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
   const offset = params.offset || 0;
   const filters = buildEstoqueFilters('p', params);
   const orderByClause = (() => {
+    const dir = params.orderDir === 'desc' ? sql`DESC` : sql`ASC`;
     switch (params.orderBy) {
       case 'vendas3m':
       case 'totalVendido3Meses':
-        return sql`COALESCE(v.total_vendido, 0) DESC`;
+        return sql`COALESCE(v.total_vendido, 0) ${dir}`;
       case 'mediaVendasMensal':
-        return sql`(COALESCE(v.total_vendido, 0) / 3) DESC`;
+        return sql`(COALESCE(v.total_vendido, 0) / 3) ${dir}`;
       case 'estoqueAtual':
-        return sql`COALESCE(p.estoque_total, 0) ASC`;
+        return sql`COALESCE(p.estoque_total, 0) ${dir}`;
       default:
         return sql`(COALESCE(v.total_vendido, 0) / 3) - COALESCE(p.estoque_total, 0) DESC`;
     }
   })();
+  const zeroStockClause = params.excludeZeroStock ? sql`AND COALESCE(p.estoque_total, 0) > 0` : sql``;
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto                         AS codProduto,
@@ -328,6 +334,7 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
     WHERE p.ativo = 'ATIVO'
       AND COALESCE(v.total_vendido, 0) > 0
       AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
+      ${zeroStockClause}
       AND ${filters}
     ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
@@ -344,6 +351,7 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
     WHERE p.ativo = 'ATIVO'
       AND COALESCE(v.total_vendido, 0) > 0
       AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
+      ${zeroStockClause}
       AND ${filters}
   `);
   return {
@@ -460,7 +468,9 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
   } else if (params.status === 'emAtencao') {
     statusClause = sql`AND COALESCE(v.total_vendido, 0) > 0 AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)`;
   }
-  const orderByClause = sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
+  const orderByClause = params.orderDir === 'desc'
+    ? sql`COALESCE(p.estoque_total, 0) DESC, p.nome ASC`
+    : sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
 
   const dataRows = await db.execute(sql`
     SELECT
