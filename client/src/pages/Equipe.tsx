@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area,
 } from "recharts";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -45,13 +46,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 function VendedorDetailModal({ vendedor, onClose }: { vendedor: any; onClose: () => void }) {
+  const { selectedCompany } = useCompany();
   const codVendedor = parseInt(vendedor?.codVendedor) || 0;
   const { data: stats, isLoading: statsLoading } = trpc.equipe.getVendedorStats.useQuery(
-    { codVendedor },
+    { codVendedor, empresa: selectedCompany ?? undefined },
     { enabled: codVendedor > 0 }
   );
   const { data: vendasPorMes, isLoading: mesLoading } = trpc.equipe.getVendedorVendasPorMes.useQuery(
-    { codVendedor },
+    { codVendedor, empresa: selectedCompany ?? undefined },
     { enabled: codVendedor > 0 }
   );
 
@@ -144,15 +146,17 @@ function VendedorDetailModal({ vendedor, onClose }: { vendedor: any; onClose: ()
 }
 
 export default function Equipe() {
+  const { selectedCompany } = useCompany();
   const [page, setPage] = useState(0);
   const [selectedVendedor, setSelectedVendedor] = useState<any>(null);
 
   const { data: equipePaginada, isLoading } = trpc.equipe.getPaginada.useQuery({
     limit: ITEMS_PER_PAGE,
     offset: page * ITEMS_PER_PAGE,
+    empresa: selectedCompany ?? undefined,
   });
 
-  const { data: ranking } = trpc.equipe.getRanking.useQuery({ limit: 15 });
+  const { data: ranking } = trpc.equipe.getRanking.useQuery({ limit: 15, empresa: selectedCompany ?? undefined });
 
   const totalPages = Math.ceil((equipePaginada?.total || 0) / ITEMS_PER_PAGE);
 

@@ -25,6 +25,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -294,6 +295,7 @@ function EstoqueProdutoRow({ p, fmtDiasEstoque }: { p: any; fmtDiasEstoque: (v: 
 }
 
 export default function Estoque() {
+  const { selectedCompany } = useCompany();
   const [activeTab, setActiveTab] = useState("visualizacao");
   const [semEstoqueOrderBy, setSemEstoqueOrderBy] = useState<"estoque">("estoque");
   const [semEstoqueOrderDir, setSemEstoqueOrderDir] = useState<"asc" | "desc">("asc");
@@ -328,14 +330,15 @@ export default function Estoque() {
   const [porMarcaOrderDir, setPorMarcaOrderDir] = useState<"asc" | "desc">("asc");
   const [, setPorMarcaPageDummy] = useState(0);
 
-  const { data: resumo } = trpc.estoque.getResumo.useQuery();
-  const { data: filterOptions } = trpc.estoque.getFilterOptions.useQuery();
+  const { data: resumo } = trpc.estoque.getResumo.useQuery({ empresa: selectedCompany ?? undefined });
+  const { data: filterOptions } = trpc.estoque.getFilterOptions.useQuery({ empresa: selectedCompany ?? undefined });
   const { data: topAtencaoData } = trpc.estoque.getEmAtencao.useQuery({
     limit: 10,
     orderBy: "mediaVendasMensal",
     orderDir: "desc",
+    empresa: selectedCompany ?? undefined,
   });
-  const { data: estoqueMarcasProblemasData } = trpc.estoque.getPorMarca.useQuery();
+  const { data: estoqueMarcasProblemasData } = trpc.estoque.getPorMarca.useQuery({ empresa: selectedCompany ?? undefined });
 
   const marcas = filterOptions?.marcas ?? [];
   const categorias = filterOptions?.categorias ?? [];
@@ -344,6 +347,7 @@ export default function Estoque() {
     ...buildEstoqueListFilters(filters),
     limit: pageSize,
     offset: page * pageSize,
+    empresa: selectedCompany ?? undefined,
   });
 
   const { data: semEstoqueData, isLoading: semEstoqueLoading } = trpc.estoque.getSemEstoque.useQuery(

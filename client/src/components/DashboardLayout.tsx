@@ -12,6 +12,15 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
+import { trpc } from "@/lib/trpc";
+import { ALL_COMPANIES_VALUE, useCompany } from "@/contexts/CompanyContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   LayoutDashboard,
   PanelLeft,
@@ -125,6 +134,7 @@ function DashboardLayoutContent({
 }: DashboardLayoutContentProps) {
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
+  const { selectedCompany, setSelectedCompany } = useCompany();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -163,6 +173,7 @@ function DashboardLayoutContent({
   const monitorItems = menuItems.filter(i => i.group === "monitores");
   const financeiroItems = menuItems.filter(i => i.group === "financeiro");
   const configItems = menuItems.filter(i => i.group === "config");
+  const { data: companies } = trpc.companies.list.useQuery();
 
   const renderItem = (item: (typeof menuItems)[0]) => {
     const isActive = location === item.path;
@@ -251,9 +262,29 @@ function DashboardLayoutContent({
           {/* Footer — version info only, no user profile */}
           <SidebarFooter className="border-t p-3">
             {!isCollapsed && (
-              <p className="text-[10px] text-muted-foreground/50 text-center select-none">
-                CompletEin v1.0
-              </p>
+              <div className="space-y-2">
+                <Select
+                  value={selectedCompany ?? ALL_COMPANIES_VALUE}
+                  onValueChange={value =>
+                    setSelectedCompany(value === ALL_COMPANIES_VALUE ? null : value)
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_COMPANIES_VALUE}>TODOS</SelectItem>
+                    {(companies ?? []).map(company => (
+                      <SelectItem key={company} value={company}>
+                        {company}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground/50 text-center select-none">
+                  CompletEin v1.0
+                </p>
+              </div>
             )}
           </SidebarFooter>
         </Sidebar>

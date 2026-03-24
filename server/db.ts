@@ -30,6 +30,12 @@ import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _migrated = false;
+type EmpresaFilter = string | undefined;
+
+function normalizeEmpresaFilter(empresa?: string) {
+  const normalized = empresa?.trim();
+  return normalized ? normalized : undefined;
+}
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -159,9 +165,14 @@ export async function searchClientes(query: string) {
     .orderBy(clientes.razaoSocial);
 }
 
-export async function getTopClientesByValue(limit: number = 10) {
+export async function getTopClientesByValue(limit: number = 10, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const conditions = [eq(clientes.ativo, 'ATIVO')];
+  if (empresaFilter) {
+    conditions.push(eq(clientes.empresa, empresaFilter));
+  }
   return await db.select({
     id: clientes.id,
     codCliente: sql<number>`ANY_VALUE(${clientes.codCliente})`,
@@ -174,7 +185,7 @@ export async function getTopClientesByValue(limit: number = 10) {
   })
     .from(clientes)
     .leftJoin(vendas, eq(clientes.codCliente, vendas.codCliente))
-    .where(eq(clientes.ativo, 'ATIVO'))
+    .where(and(...conditions))
     .groupBy(clientes.id)
     .orderBy(desc(sql`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))))`)) 
     .limit(limit);
@@ -195,9 +206,14 @@ export async function getProdutoById(id: number) {
   return result[0] || null;
 }
 
-export async function getTopProdutosByVendas(limit: number = 10) {
+export async function getTopProdutosByVendas(limit: number = 10, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const conditions = [sql`${vendas.codProduto} IS NOT NULL`];
+  if (empresaFilter) {
+    conditions.push(eq(vendas.empresa, empresaFilter));
+  }
   return await db.select({
     codProduto: vendas.codProduto,
     produto: sql<string>`ANY_VALUE(${vendas.produto})`,
@@ -207,7 +223,7 @@ export async function getTopProdutosByVendas(limit: number = 10) {
     faturamento: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
   })
     .from(vendas)
-    .where(sql`${vendas.codProduto} IS NOT NULL`)
+    .where(and(...conditions))
     .groupBy(vendas.codProduto)
     .orderBy(desc(sql`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))))`)) 
     .limit(limit);
@@ -251,12 +267,14 @@ function buildEstoqueFilters(alias: string, params: EstoqueFilterParams) {
   return clauses.length ? sql.join(clauses, sql` AND `) : sql`1=1`;
 }
 
-export async function getEstoqueFilterOptions() {
+export async function getEstoqueFilterOptions(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { marcas: [], categorias: [] };
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const [marcaRows, catRows] = await Promise.all([
-    db.execute(sql`SELECT DISTINCT marca FROM produtos WHERE ativo = 'ATIVO' AND marca IS NOT NULL AND marca != '' ORDER BY marca`),
-    db.execute(sql`SELECT DISTINCT categoria FROM produtos WHERE ativo = 'ATIVO' AND categoria IS NOT NULL AND categoria != '' ORDER BY categoria`),
+    db.execute(sql`SELECT DISTINCT marca FROM produtos WHERE ativo = 'ATIVO' ${empresaClause} AND marca IS NOT NULL AND marca != '' ORDER BY marca`),
+    db.execute(sql`SELECT DISTINCT categoria FROM produtos WHERE ativo = 'ATIVO' ${empresaClause} AND categoria IS NOT NULL AND categoria != '' ORDER BY categoria`),
   ]);
   return {
     marcas: ((marcaRows[0] as unknown) as any[]).map((r: any) => r.marca),
@@ -264,7 +282,7 @@ export async function getEstoqueFilterOptions() {
   };
 }
 
-export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
+export async function getProdutosSemEstoque(params: EstoqueFilterParams & { empresa?: EmpresaFilter } = {}) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const limit = params.limit || 50;
@@ -273,6 +291,9 @@ export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
   const orderByClause = params.orderDir === 'desc'
     ? sql`COALESCE(p.estoque_total, 0) DESC, p.nome ASC`
     : sql`COALESCE(p.estoque_total, 0) ASC, p.nome ASC`;
+  const empresaFilter = normalizeEmpresaFilter(params.empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto  AS codProduto,
@@ -286,17 +307,17 @@ export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO' AND COALESCE(p.estoque_total, 0) = 0 AND ${filters}
+    WHERE p.ativo = 'ATIVO' ${empresaClause} AND COALESCE(p.estoque_total, 0) = 0 AND ${filters}
     ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
   `);
   const countRows = await db.execute(sql`
     SELECT COUNT(*) AS total
     FROM produtos p
-    WHERE p.ativo = 'ATIVO' AND COALESCE(p.estoque_total, 0) = 0 AND ${filters}
+    WHERE p.ativo = 'ATIVO' ${empresaClause} AND COALESCE(p.estoque_total, 0) = 0 AND ${filters}
   `);
   return {
     data: (dataRows[0] as unknown) as any[],
@@ -304,7 +325,7 @@ export async function getProdutosSemEstoque(params: EstoqueFilterParams = {}) {
   };
 }
 
-export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
+export async function getProdutosEmAtencao(params: EstoqueFilterParams & { empresa?: EmpresaFilter } = {}) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const limit = params.limit || 50;
@@ -326,6 +347,9 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
         return sql`(COALESCE(v.total_vendido, 0) / 3) - COALESCE(p.estoque_total, 0) DESC`;
     }
   })();
+  const empresaFilter = normalizeEmpresaFilter(params.empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto                         AS codProduto,
@@ -340,10 +364,10 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO'
+    WHERE p.ativo = 'ATIVO' ${empresaClause}
       AND COALESCE(p.estoque_total, 0) > 0
       AND COALESCE(v.total_vendido, 0) > 0
       AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
@@ -357,10 +381,10 @@ export async function getProdutosEmAtencao(params: EstoqueFilterParams = {}) {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO'
+    WHERE p.ativo = 'ATIVO' ${empresaClause}
       AND COALESCE(p.estoque_total, 0) > 0
       AND COALESCE(v.total_vendido, 0) > 0
       AND COALESCE(p.estoque_total, 0) < (COALESCE(v.total_vendido, 0) / 3)
@@ -377,6 +401,7 @@ export async function getProjecaoPedidos(params: EstoqueFilterParams & {
   excludeZeroStock?: boolean;
   /** When true (default), only products with sales in the last 3 months. When false, also include products with zero sales in that window. */
   excludeNoSales?: boolean;
+  empresa?: EmpresaFilter;
 }) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
@@ -407,6 +432,9 @@ export async function getProjecaoPedidos(params: EstoqueFilterParams & {
         (COALESCE(v.total_vendido, 0) > 0 AND ${diasEstoqueSql} < ${diasPedido})
         OR COALESCE(v.total_vendido, 0) = 0
       )`;
+  const empresaFilter = normalizeEmpresaFilter(params.empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const dataRows = await db.execute(sql`
     SELECT
       p.cod_produto                         AS codProduto,
@@ -421,10 +449,10 @@ export async function getProjecaoPedidos(params: EstoqueFilterParams & {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO'
+    WHERE p.ativo = 'ATIVO' ${empresaClause}
       ${projecaoDiasClause}
       ${excludeZeroClause}
       AND ${filters}
@@ -437,10 +465,10 @@ export async function getProjecaoPedidos(params: EstoqueFilterParams & {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO'
+    WHERE p.ativo = 'ATIVO' ${empresaClause}
       ${projecaoDiasClause}
       ${excludeZeroClause}
       AND ${filters}
@@ -451,21 +479,26 @@ export async function getProjecaoPedidos(params: EstoqueFilterParams & {
   };
 }
 
-export async function getTotalEstoque() {
+export async function getTotalEstoque(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const rows = await db.execute(sql`
     SELECT COALESCE(SUM(estoque_total), 0) AS total
     FROM produtos
-    WHERE ativo = 'ATIVO'
+    WHERE ativo = 'ATIVO' ${empresaClause}
   `);
   const result = ((rows[0] as unknown) as any[])[0];
   return Number(result?.total || 0);
 }
 
-export async function getEstoqueResumo() {
+export async function getEstoqueResumo(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { total: 0, semEstoque: 0, emAtencao: 0, totalProdutos: 0 };
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const rows = await db.execute(sql`
     SELECT
       COALESCE(SUM(p.estoque_total), 0) AS totalGeral,
@@ -481,10 +514,10 @@ export async function getEstoqueResumo() {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO'
+    WHERE p.ativo = 'ATIVO' ${empresaClause}
   `);
   const r = ((rows[0] as unknown) as any[])[0];
   return {
@@ -495,9 +528,12 @@ export async function getEstoqueResumo() {
   };
 }
 
-export async function getEstoquePorCategoria() {
+export async function getEstoquePorCategoria(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const rows = await db.execute(sql`
     SELECT
       p.categoria,
@@ -513,10 +549,10 @@ export async function getEstoquePorCategoria() {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO' AND p.categoria IS NOT NULL AND p.categoria != ''
+    WHERE p.ativo = 'ATIVO' ${empresaClause} AND p.categoria IS NOT NULL AND p.categoria != ''
     GROUP BY p.categoria
     ORDER BY (SUM(CASE WHEN COALESCE(p.estoque_total, 0) = 0 THEN 1 ELSE 0 END) +
       SUM(CASE
@@ -535,9 +571,12 @@ export async function getEstoquePorCategoria() {
   }));
 }
 
-export async function getEstoquePorMarca() {
+export async function getEstoquePorMarca(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const rows = await db.execute(sql`
     SELECT
       p.marca,
@@ -553,10 +592,10 @@ export async function getEstoquePorMarca() {
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
-    WHERE p.ativo = 'ATIVO' AND p.marca IS NOT NULL AND p.marca != ''
+    WHERE p.ativo = 'ATIVO' ${empresaClause} AND p.marca IS NOT NULL AND p.marca != ''
     GROUP BY p.marca
     ORDER BY (SUM(CASE WHEN COALESCE(p.estoque_total, 0) = 0 THEN 1 ELSE 0 END) +
       SUM(CASE
@@ -577,6 +616,7 @@ export async function getEstoquePorMarca() {
 
 interface EstoquePaginadoParams extends EstoqueFilterParams {
   status?: 'semEstoque' | 'emAtencao';
+  empresa?: EmpresaFilter;
 }
 
 export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
@@ -586,11 +626,14 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
   const offset = params.offset || 0;
   const filters = buildEstoqueFilters('p', params);
 
+  const empresaFilter = normalizeEmpresaFilter(params.empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const vendasJoin = sql`
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
   `;
@@ -617,7 +660,7 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
       ${diasEstoqueSql} AS diasEstoque
     FROM produtos p
     ${vendasJoin}
-    WHERE p.ativo = 'ATIVO' AND ${filters} ${statusClause}
+    WHERE p.ativo = 'ATIVO' ${empresaClause} AND ${filters} ${statusClause}
     ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offset}
   `);
@@ -625,7 +668,7 @@ export async function getEstoquePaginado(params: EstoquePaginadoParams = {}) {
     SELECT COUNT(*) AS total
     FROM produtos p
     ${vendasJoin}
-    WHERE p.ativo = 'ATIVO' AND ${filters} ${statusClause}
+    WHERE p.ativo = 'ATIVO' ${empresaClause} AND ${filters} ${statusClause}
   `);
   return {
     data: (dataRows[0] as unknown) as any[],
@@ -649,11 +692,14 @@ export async function getEstoqueProdutosAgrupadosPorMarca(params: EstoquePaginad
   if (!db) return { groups: [] as { marca: string; produtos: EstoqueProdutoListaRow[] }[] };
   const filters = buildEstoqueFilters('p', params);
 
+  const empresaFilter = normalizeEmpresaFilter(params.empresa);
+  const empresaClause = empresaFilter ? sql`AND p.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   const vendasJoin = sql`
     LEFT JOIN (
       SELECT cod_produto, SUM(COALESCE(qtd_und_vda, 0)) AS total_vendido
       FROM vendas
-      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      WHERE emissao_data >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH) ${vendasEmpresaClause}
       GROUP BY cod_produto
     ) v ON v.cod_produto = p.cod_produto
   `;
@@ -683,7 +729,7 @@ export async function getEstoqueProdutosAgrupadosPorMarca(params: EstoquePaginad
       ${diasEstoqueSql} AS diasEstoque
     FROM produtos p
     ${vendasJoin}
-    WHERE p.ativo = 'ATIVO' AND ${filters} ${statusClause}
+    WHERE p.ativo = 'ATIVO' ${empresaClause} AND ${filters} ${statusClause}
     ORDER BY ${marcaBucket} ASC, p.marca ASC, ${productOrder}
   `);
 
@@ -717,9 +763,12 @@ export async function getEquipeById(id: number) {
   return result[0] || null;
 }
 
-export async function getVendedorRanking(limit: number = 10) {
+export async function getVendedorRanking(limit: number = 10, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const conditions = [sql`${equipe.ativo} = 'ATIVO'`];
+  if (empresaFilter) conditions.push(eq(equipe.empresa, empresaFilter));
   return await db.select({
     id: equipe.id,
     codVendedor: sql<number>`ANY_VALUE(${equipe.codVendedor})`,
@@ -732,7 +781,7 @@ export async function getVendedorRanking(limit: number = 10) {
   })
     .from(equipe)
     .leftJoin(vendas, eq(equipe.codVendedor, vendas.codVendedor))
-    .where(sql`${equipe.ativo} = 'ATIVO'`)
+    .where(and(...conditions))
     .groupBy(equipe.id)
     .orderBy(desc(sql`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))))`)) 
     .limit(limit);
@@ -764,18 +813,21 @@ export async function getVendasByClienteId(clienteId: number) {
     .orderBy(desc(vendas.emissaoData));
 }
 
-export async function getVendasByPeriod(startDate: Date, endDate: Date) {
+export async function getVendasByPeriod(startDate: Date, endDate: Date, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const conditions = [
+    gte(vendas.emissaoData, startDate),
+    lte(vendas.emissaoData, endDate),
+  ];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   return await db.select().from(vendas)
-    .where(and(
-      gte(vendas.emissaoData, startDate),
-      lte(vendas.emissaoData, endDate)
-    ))
+    .where(and(...conditions))
     .orderBy(desc(vendas.emissaoData));
 }
 
-export async function getTotalVendas(startDate?: Date, endDate?: Date) {
+export async function getTotalVendas(startDate?: Date, endDate?: Date, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
   
@@ -783,6 +835,8 @@ export async function getTotalVendas(startDate?: Date, endDate?: Date) {
     const conditions = [];
     if (startDate) conditions.push(gte(vendas.emissaoData, startDate));
     if (endDate) conditions.push(lte(vendas.emissaoData, endDate));
+    const empresaFilter = normalizeEmpresaFilter(empresa);
+    if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
     
     const result = await db.select({
       total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
@@ -807,13 +861,15 @@ export async function getTotalVendas(startDate?: Date, endDate?: Date) {
   }
 }
 
-export async function getQuantidadeVendas(startDate?: Date, endDate?: Date) {
+export async function getQuantidadeVendas(startDate?: Date, endDate?: Date, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
   
   const conditions = [];
   if (startDate) conditions.push(gte(vendas.emissaoData, startDate));
   if (endDate) conditions.push(lte(vendas.emissaoData, endDate));
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   
   const result = await db.select({
     quantidade: sql<number>`COUNT(${vendas.id})`,
@@ -824,13 +880,15 @@ export async function getQuantidadeVendas(startDate?: Date, endDate?: Date) {
   return result[0]?.quantidade || 0;
 }
 
-export async function getTicketMedio(startDate?: Date, endDate?: Date) {
+export async function getTicketMedio(startDate?: Date, endDate?: Date, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
   
   const conditions = [];
   if (startDate) conditions.push(gte(vendas.emissaoData, startDate));
   if (endDate) conditions.push(lte(vendas.emissaoData, endDate));
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   
   const result = await db.select({
     media: sql<number>`COALESCE(AVG(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
@@ -959,61 +1017,96 @@ export async function insertVendas(data: typeof vendas.$inferInsert[]) {
   return { success: data.length, failed: 0, errors: [] };
 }
 
+export async function listCompanies(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.execute(sql`
+    SELECT empresa
+    FROM (
+      SELECT DISTINCT empresa FROM clientes
+      UNION
+      SELECT DISTINCT empresa FROM produtos
+      UNION
+      SELECT DISTINCT empresa FROM equipe
+      UNION
+      SELECT DISTINCT empresa FROM vendas
+    ) t
+    WHERE empresa IS NOT NULL AND TRIM(empresa) <> ''
+    ORDER BY empresa
+  `);
+  return ((rows[0] as unknown) as Array<{ empresa: string }>).map(r => r.empresa);
+}
 
 
-export async function getClientesCount() {
+
+export async function getClientesCount(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
+  const conditions = [eq(clientes.ativo, 'ATIVO')];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(clientes.empresa, empresaFilter));
   const result = await db.select({
     count: sql<number>`COUNT(*)`,
-  }).from(clientes).where(eq(clientes.ativo, 'ATIVO'));
+  }).from(clientes).where(and(...conditions));
   return result[0]?.count || 0;
 }
 
-export async function getProdutosCount() {
+export async function getProdutosCount(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
+  const conditions = [eq(produtos.ativo, 'ATIVO')];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(produtos.empresa, empresaFilter));
   const result = await db.select({
     count: sql<number>`COUNT(*)`,
-  }).from(produtos).where(eq(produtos.ativo, 'ATIVO'));
+  }).from(produtos).where(and(...conditions));
   return result[0]?.count || 0;
 }
 
-export async function getEquipeCount() {
+export async function getEquipeCount(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
+  const conditions = [sql`${equipe.ativo} = 'ATIVO'`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(equipe.empresa, empresaFilter));
   const result = await db.select({
     count: sql<number>`COUNT(*)`,
-  }).from(equipe).where(sql`${equipe.ativo} = 'ATIVO'`);
+  }).from(equipe).where(and(...conditions));
   return result[0]?.count || 0;
 }
 
 // ============= PERÍODOS DISPONÍVEIS =============
 
-export async function getAvailablePeriods(): Promise<string[]> {
+export async function getAvailablePeriods(empresa?: EmpresaFilter): Promise<string[]> {
   const db = await getDb();
   if (!db) return [];
+  const conditions = [sql`${vendas.emissaoAnoMes} IS NOT NULL`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   const rows = await db.selectDistinct({
     mes: vendas.emissaoAnoMes,
   })
     .from(vendas)
-    .where(sql`${vendas.emissaoAnoMes} IS NOT NULL`)
+    .where(and(...conditions))
     .orderBy(desc(vendas.emissaoAnoMes));
   return rows.map(r => r.mes!).filter(Boolean);
 }
 
 // ============= VENDAS POR MÊS (GRÁFICO) =============
 
-export async function getVendasPorMes(meses: number = 12) {
+export async function getVendasPorMes(meses: number = 12, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const conditions = [sql`${vendas.emissaoAnoMes} IS NOT NULL`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   return await db.select({
     mes: vendas.emissaoAnoMes,
     total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
     quantidade: sql<number>`COUNT(${vendas.id})`,
   })
     .from(vendas)
-    .where(sql`${vendas.emissaoAnoMes} IS NOT NULL`)
+    .where(and(...conditions))
     .groupBy(vendas.emissaoAnoMes)
     .orderBy(vendas.emissaoAnoMes)
     .limit(meses);
@@ -1034,31 +1127,37 @@ export async function getVendasPorVendedor(limit: number = 20) {
     .limit(limit);
 }
 
-export async function getVendasPorCategoria() {
+export async function getVendasPorCategoria(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const conditions = [sql`${vendas.categoria} IS NOT NULL AND ${vendas.categoria} != ''`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   return await db.select({
     categoria: vendas.categoria,
     total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
     quantidade: sql<number>`COUNT(${vendas.id})`,
   })
     .from(vendas)
-    .where(sql`${vendas.categoria} IS NOT NULL AND ${vendas.categoria} != ''`)
+    .where(and(...conditions))
     .groupBy(vendas.categoria)
     .orderBy(desc(sql`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))))`))
     .limit(20);
 }
 
-export async function getVendasPorCanal() {
+export async function getVendasPorCanal(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const conditions = [sql`${vendas.canal} IS NOT NULL AND ${vendas.canal} != ''`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   return await db.select({
     canal: vendas.canal,
     total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
     quantidade: sql<number>`COUNT(${vendas.id})`,
   })
     .from(vendas)
-    .where(sql`${vendas.canal} IS NOT NULL AND ${vendas.canal} != ''`)
+    .where(and(...conditions))
     .groupBy(vendas.canal)
     .orderBy(desc(sql`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))))`));
 }
@@ -1085,13 +1184,13 @@ export async function getVendasRecentes(limit: number = 50) {
     .limit(limit);
 }
 
-export async function getVendasPaginadas(limit: number = 50, offset: number = 0, search?: string) {
+export async function getVendasPaginadas(limit: number = 50, offset: number = 0, search?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   
-  const conditions = search
-    ? [like(vendas.razaoSocial, `%${search}%`)]
-    : [];
+  const conditions = search ? [like(vendas.razaoSocial, `%${search}%`)] : [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
 
   const [data, countResult] = await Promise.all([
     db.select({
@@ -1125,7 +1224,7 @@ export async function getVendasPaginadas(limit: number = 50, offset: number = 0,
 
 // ============= CLIENTES PAGINADOS =============
 
-export async function getClientesPaginados(limit: number = 50, offset: number = 0, search?: string) {
+export async function getClientesPaginados(limit: number = 50, offset: number = 0, search?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   
@@ -1133,6 +1232,8 @@ export async function getClientesPaginados(limit: number = 50, offset: number = 
   if (search) {
     conditions.push(like(clientes.razaoSocial, `%${search}%`));
   }
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(clientes.empresa, empresaFilter));
 
   const [data, countResult] = await Promise.all([
     db.select().from(clientes)
@@ -1167,9 +1268,12 @@ export async function getClienteHistoricoVendas(codCliente: string) {
     .limit(100);
 }
 
-export async function getClienteStats(codCliente: string) {
+export async function getClienteStats(codCliente: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return null;
+  const conditions = [sql`${vendas.codCliente} = ${codCliente}`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   const result = await db.select({
     totalCompras: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
     quantidadeCompras: sql<number>`COUNT(${vendas.id})`,
@@ -1177,19 +1281,22 @@ export async function getClienteStats(codCliente: string) {
     ultimaCompra: sql<string>`MAX(${vendas.emissaoData})`,
   })
     .from(vendas)
-    .where(sql`${vendas.codCliente} = ${codCliente}`);
+    .where(and(...conditions));
   return result[0] || null;
 }
 
 // ============= CLIENTES ANALYTICS =============
 
-export async function getClientesKPIs(dataInicio?: string, dataFim?: string) {
+export async function getClientesKPIs(dataInicio?: string, dataFim?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { totalAtivos: 0, totalComVendas: 0, novos: 0, inativos: 0, ticketMedioGeral: 0, totalFaturamento: 0 };
   await db.execute(sql`SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'`);
   const dateFilter = dataInicio && dataFim
     ? sql`AND v.emissao_data BETWEEN ${dataInicio} AND ${dataFim}`
     : sql``;
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND v.empresa = ${empresaFilter}` : sql``;
+  const empresaClientesClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
   // dateFilterSub: same filter but without table alias 'v.' for use in subqueries
   const dateFilterSub = dataInicio && dataFim
     ? sql`AND emissao_data BETWEEN ${dataInicio} AND ${dataFim}`
@@ -1197,12 +1304,12 @@ export async function getClientesKPIs(dataInicio?: string, dataFim?: string) {
 
   const rows = await db.execute(sql`
     SELECT
-      (SELECT COUNT(*) FROM clientes WHERE ativo = 'ATIVO') AS totalAtivos,
+      (SELECT COUNT(*) FROM clientes WHERE ativo = 'ATIVO' ${empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``}) AS totalAtivos,
       COUNT(DISTINCT v.cod_cliente) AS totalComVendas,
       COALESCE(SUM(CAST(v.vlr_vda AS DECIMAL(12,2))), 0) AS totalFaturamento,
       COALESCE(AVG(CAST(v.vlr_vda AS DECIMAL(12,2))), 0) AS ticketMedioGeral
     FROM vendas v
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${empresaClause}
   `);
   const r = ((rows[0] as unknown) as any[])[0];
 
@@ -1210,10 +1317,10 @@ export async function getClientesKPIs(dataInicio?: string, dataFim?: string) {
   const novosRows = await db.execute(sql`
     SELECT COUNT(DISTINCT v.cod_cliente) AS novos
     FROM vendas v
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${empresaClause}
     AND v.cod_cliente NOT IN (
       SELECT DISTINCT cod_cliente FROM vendas
-      WHERE ocorrencia = 'VENDA'
+      WHERE ocorrencia = 'VENDA' ${empresaClientesClause}
       ${dataInicio ? sql`AND emissao_data < ${dataInicio}` : sql`AND 1=0`}
     )
   `);
@@ -1223,13 +1330,13 @@ export async function getClientesKPIs(dataInicio?: string, dataFim?: string) {
   const inativosRows = await db.execute(sql`
     SELECT COUNT(DISTINCT c.cod_cliente) AS inativos
     FROM clientes c
-    WHERE c.ativo = 'ATIVO'
+    WHERE c.ativo = 'ATIVO' ${empresaFilter ? sql`AND c.empresa = ${empresaFilter}` : sql``}
     AND c.cod_cliente NOT IN (
       SELECT DISTINCT cod_cliente FROM vendas
-      WHERE ocorrencia = 'VENDA' ${dateFilterSub}
+      WHERE ocorrencia = 'VENDA' ${dateFilterSub} ${empresaClientesClause}
     )
     AND c.cod_cliente IN (
-      SELECT DISTINCT cod_cliente FROM vendas WHERE ocorrencia = 'VENDA'
+      SELECT DISTINCT cod_cliente FROM vendas WHERE ocorrencia = 'VENDA' ${empresaClientesClause}
     )
   `);
   const inativos = Number(((inativosRows[0] as unknown) as any[])[0]?.inativos || 0);
@@ -1250,7 +1357,8 @@ export async function getRankingClientes(
   search?: string,
   orderBy: 'valor' | 'pedidos' | 'ticket' = 'valor',
   dataInicio?: string,
-  dataFim?: string
+  dataFim?: string,
+  empresa?: EmpresaFilter
 ) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
@@ -1259,6 +1367,8 @@ export async function getRankingClientes(
   const dateFilter = dataInicio && dataFim
     ? sql`AND v.emissao_data BETWEEN ${dataInicio} AND ${dataFim}`
     : sql``;
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND v.empresa = ${empresaFilter}` : sql``;
 
   const searchFilter = search
     ? sql`AND (c.fantasia LIKE ${'%' + search + '%'} OR c.razao_social LIKE ${'%' + search + '%'})`
@@ -1283,7 +1393,7 @@ export async function getRankingClientes(
       MAX(v.emissao_data) AS ultimaCompra
     FROM vendas v
     LEFT JOIN clientes c ON v.cod_cliente = c.cod_cliente
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${searchFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${searchFilter} ${empresaClause}
     GROUP BY v.cod_cliente
     ORDER BY ${orderClause}
     LIMIT ${limit} OFFSET ${sql.raw(String(offset))}
@@ -1293,7 +1403,7 @@ export async function getRankingClientes(
     SELECT COUNT(DISTINCT v.cod_cliente) AS total
     FROM vendas v
     LEFT JOIN clientes c ON v.cod_cliente = c.cod_cliente
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${searchFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${searchFilter} ${empresaClause}
   `);
 
   return {
@@ -1302,7 +1412,7 @@ export async function getRankingClientes(
   };
 }
 
-export async function getTopClientesPorPedidos(limit: number = 10, dataInicio?: string, dataFim?: string) {
+export async function getTopClientesPorPedidos(limit: number = 10, dataInicio?: string, dataFim?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
   await db.execute(sql`SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'`);
@@ -1310,6 +1420,8 @@ export async function getTopClientesPorPedidos(limit: number = 10, dataInicio?: 
   const dateFilter = dataInicio && dataFim
     ? sql`AND v.emissao_data BETWEEN ${dataInicio} AND ${dataFim}`
     : sql``;
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND v.empresa = ${empresaFilter}` : sql``;
 
   const rows = await db.execute(sql`
     SELECT
@@ -1322,7 +1434,7 @@ export async function getTopClientesPorPedidos(limit: number = 10, dataInicio?: 
       AVG(CAST(v.vlr_vda AS DECIMAL(12,2))) AS ticketMedio
     FROM vendas v
     LEFT JOIN clientes c ON v.cod_cliente = c.cod_cliente
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${empresaClause}
     GROUP BY v.cod_cliente
     ORDER BY totalPedidos DESC
     LIMIT ${sql.raw(String(limit))}
@@ -1330,7 +1442,7 @@ export async function getTopClientesPorPedidos(limit: number = 10, dataInicio?: 
   return (rows[0] as unknown) as any[];
 }
 
-export async function getTopClientesPorValor(limit: number = 10, dataInicio?: string, dataFim?: string) {
+export async function getTopClientesPorValor(limit: number = 10, dataInicio?: string, dataFim?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
   await db.execute(sql`SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'`);
@@ -1338,6 +1450,8 @@ export async function getTopClientesPorValor(limit: number = 10, dataInicio?: st
   const dateFilter = dataInicio && dataFim
     ? sql`AND v.emissao_data BETWEEN ${dataInicio} AND ${dataFim}`
     : sql``;
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND v.empresa = ${empresaFilter}` : sql``;
 
   const rows = await db.execute(sql`
     SELECT
@@ -1350,7 +1464,7 @@ export async function getTopClientesPorValor(limit: number = 10, dataInicio?: st
       AVG(CAST(v.vlr_vda AS DECIMAL(12,2))) AS ticketMedio
     FROM vendas v
     LEFT JOIN clientes c ON v.cod_cliente = c.cod_cliente
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${empresaClause}
     GROUP BY v.cod_cliente
     ORDER BY totalComprado DESC
     LIMIT ${sql.raw(String(limit))}
@@ -1358,7 +1472,7 @@ export async function getTopClientesPorValor(limit: number = 10, dataInicio?: st
   return (rows[0] as unknown) as any[];
 }
 
-export async function getClientesInativos(limit: number = 50, offset: number = 0, dataInicio?: string, dataFim?: string) {
+export async function getClientesInativos(limit: number = 50, offset: number = 0, dataInicio?: string, dataFim?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   await db.execute(sql`SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'`);
@@ -1366,6 +1480,9 @@ export async function getClientesInativos(limit: number = 50, offset: number = 0
   const dateFilter = dataInicio && dataFim
     ? sql`AND emissao_data BETWEEN ${dataInicio} AND ${dataFim}`
     : sql``;
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND c.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
 
   const dataRows = await db.execute(sql`
     SELECT
@@ -1379,13 +1496,13 @@ export async function getClientesInativos(limit: number = 50, offset: number = 0
       COALESCE(SUM(CAST(v.vlr_vda AS DECIMAL(12,2))), 0) AS totalComprado
     FROM clientes c
     LEFT JOIN vendas v ON c.cod_cliente = v.cod_cliente AND v.ocorrencia = 'VENDA'
-    WHERE c.ativo = 'ATIVO'
+    WHERE c.ativo = 'ATIVO' ${empresaClause}
     AND c.cod_cliente NOT IN (
       SELECT DISTINCT cod_cliente FROM vendas
-      WHERE ocorrencia = 'VENDA' ${dateFilter}
+      WHERE ocorrencia = 'VENDA' ${dateFilter} ${vendasEmpresaClause}
     )
     AND c.cod_cliente IN (
-      SELECT DISTINCT cod_cliente FROM vendas WHERE ocorrencia = 'VENDA'
+      SELECT DISTINCT cod_cliente FROM vendas WHERE ocorrencia = 'VENDA' ${vendasEmpresaClause}
     )
     GROUP BY c.cod_cliente, c.fantasia, c.razao_social, c.cidade, c.estado, c.data_cadastro
     ORDER BY ultimaCompra DESC
@@ -1394,13 +1511,13 @@ export async function getClientesInativos(limit: number = 50, offset: number = 0
   const countRows = await db.execute(sql`
     SELECT COUNT(DISTINCT c.cod_cliente) AS total
     FROM clientes c
-    WHERE c.ativo = 'ATIVO'
+    WHERE c.ativo = 'ATIVO' ${empresaClause}
     AND c.cod_cliente NOT IN (
       SELECT DISTINCT cod_cliente FROM vendas
-      WHERE ocorrencia = 'VENDA' ${dateFilter}
+      WHERE ocorrencia = 'VENDA' ${dateFilter} ${vendasEmpresaClause}
     )
     AND c.cod_cliente IN (
-      SELECT DISTINCT cod_cliente FROM vendas WHERE ocorrencia = 'VENDA'
+      SELECT DISTINCT cod_cliente FROM vendas WHERE ocorrencia = 'VENDA' ${vendasEmpresaClause}
     )
   `);
   return {
@@ -1408,7 +1525,7 @@ export async function getClientesInativos(limit: number = 50, offset: number = 0
     total: Number(((countRows[0] as unknown) as any[])[0]?.total || 0),
   };
 }
-export async function getClientesNovos(limit: number = 50, offset: number = 0, dataInicio?: string, dataFim?: string) {
+export async function getClientesNovos(limit: number = 50, offset: number = 0, dataInicio?: string, dataFim?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   await db.execute(sql`SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'`);
@@ -1416,6 +1533,9 @@ export async function getClientesNovos(limit: number = 50, offset: number = 0, d
   const dateFilter = dataInicio && dataFim
     ? sql`AND v.emissao_data BETWEEN ${dataInicio} AND ${dataFim}`
     : sql``;
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND v.empresa = ${empresaFilter}` : sql``;
+  const vendasEmpresaClause = empresaFilter ? sql`AND empresa = ${empresaFilter}` : sql``;
 
   const beforeFilter = dataInicio
     ? sql`AND emissao_data < ${dataInicio}`
@@ -1432,10 +1552,10 @@ export async function getClientesNovos(limit: number = 50, offset: number = 0, d
       SUM(CAST(v.vlr_vda AS DECIMAL(12,2))) AS totalComprado
     FROM vendas v
     LEFT JOIN clientes c ON v.cod_cliente = c.cod_cliente
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${empresaClause}
     AND v.cod_cliente NOT IN (
       SELECT DISTINCT cod_cliente FROM vendas
-      WHERE ocorrencia = 'VENDA' ${beforeFilter}
+      WHERE ocorrencia = 'VENDA' ${beforeFilter} ${vendasEmpresaClause}
     )
     GROUP BY v.cod_cliente
     ORDER BY totalComprado DESC
@@ -1444,10 +1564,10 @@ export async function getClientesNovos(limit: number = 50, offset: number = 0, d
   const countRows = await db.execute(sql`
     SELECT COUNT(DISTINCT v.cod_cliente) AS total
     FROM vendas v
-    WHERE v.ocorrencia = 'VENDA' ${dateFilter}
+    WHERE v.ocorrencia = 'VENDA' ${dateFilter} ${empresaClause}
     AND v.cod_cliente NOT IN (
       SELECT DISTINCT cod_cliente FROM vendas
-      WHERE ocorrencia = 'VENDA' ${beforeFilter}
+      WHERE ocorrencia = 'VENDA' ${beforeFilter} ${vendasEmpresaClause}
     )
   `);
   return {
@@ -1455,18 +1575,20 @@ export async function getClientesNovos(limit: number = 50, offset: number = 0, d
     total: Number(((countRows[0] as unknown) as any[])[0]?.total || 0),
   };
 }
-export async function getEvolucaoMensalTopClientes(topN: number = 5) {
+export async function getEvolucaoMensalTopClientes(topN: number = 5, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
   await db.execute(sql`SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'`);
 
   // Get top N clients by total value
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  const empresaClause = empresaFilter ? sql`AND v.empresa = ${empresaFilter}` : sql``;
   const topRows = await db.execute(sql`
     SELECT v.cod_cliente AS codCliente,
       COALESCE(ANY_VALUE(c.fantasia), ANY_VALUE(c.razao_social)) AS nome
     FROM vendas v
     LEFT JOIN clientes c ON v.cod_cliente = c.cod_cliente
-    WHERE v.ocorrencia = 'VENDA'
+    WHERE v.ocorrencia = 'VENDA' ${empresaClause}
     GROUP BY v.cod_cliente
     ORDER BY SUM(CAST(v.vlr_vda AS DECIMAL(12,2))) DESC
     LIMIT ${sql.raw(String(topN))}
@@ -1483,7 +1605,7 @@ export async function getEvolucaoMensalTopClientes(topN: number = 5) {
       DATE_FORMAT(v.emissao_data, '%Y-%m') AS mes,
       SUM(CAST(v.vlr_vda AS DECIMAL(12,2))) AS totalComprado
     FROM vendas v
-    WHERE v.ocorrencia = 'VENDA'
+    WHERE v.ocorrencia = 'VENDA' ${empresaClause}
     AND v.cod_cliente IN (${sql.raw(codigos.join(','))})
     GROUP BY v.cod_cliente, mes
     ORDER BY mes ASC
@@ -1501,7 +1623,7 @@ export async function getEvolucaoMensalTopClientes(topN: number = 5) {
 
 // ============= PRODUTOS PAGINADOS =============
 
-export async function getProdutosPaginados(limit: number = 50, offset: number = 0, search?: string) {
+export async function getProdutosPaginados(limit: number = 50, offset: number = 0, search?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   
@@ -1509,6 +1631,8 @@ export async function getProdutosPaginados(limit: number = 50, offset: number = 
   if (search) {
     conditions.push(like(produtos.nome, `%${search}%`));
   }
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(produtos.empresa, empresaFilter));
 
   const [data, countResult] = await Promise.all([
     db.select().from(produtos)
@@ -1524,9 +1648,12 @@ export async function getProdutosPaginados(limit: number = 50, offset: number = 
   return { data, total: countResult[0]?.total || 0 };
 }
 
-export async function getProdutoPerformance(codProduto: string) {
+export async function getProdutoPerformance(codProduto: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return null;
+  const conditions = [sql`${vendas.codProduto} = ${codProduto}`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   const result = await db.select({
     totalVendido: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
     qtdVendida: sql<number>`COALESCE(SUM(CAST(${vendas.qtdUndVda} AS DECIMAL(12,2))), 0)`,
@@ -1534,19 +1661,21 @@ export async function getProdutoPerformance(codProduto: string) {
     precoMedio: sql<number>`COALESCE(AVG(CAST(${vendas.vlrUndVda} AS DECIMAL(12,2))), 0)`,
   })
     .from(vendas)
-    .where(sql`${vendas.codProduto} = ${codProduto}`);
+    .where(and(...conditions));
   return result[0] || null;
 }
 
 // ============= EQUIPE PAGINADA =============
 
-export async function getEquipePaginada(limit: number = 50, offset: number = 0, search?: string) {
+export async function getEquipePaginada(limit: number = 50, offset: number = 0, search?: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   
   const conditions = search
     ? [like(equipe.nome, `%${search}%`)]
     : [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(equipe.empresa, empresaFilter));
 
   const [data, countResult] = await Promise.all([
     db.select().from(equipe)
@@ -1562,9 +1691,12 @@ export async function getEquipePaginada(limit: number = 50, offset: number = 0, 
   return { data, total: countResult[0]?.total || 0 };
 }
 
-export async function getVendedorStats(codVendedor: number) {
+export async function getVendedorStats(codVendedor: number, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return null;
+  const conditions = [eq(vendas.codVendedor, codVendedor)];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   const result = await db.select({
     totalFaturamento: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
     quantidadeVendas: sql<number>`COUNT(${vendas.id})`,
@@ -1572,23 +1704,26 @@ export async function getVendedorStats(codVendedor: number) {
     clientesAtendidos: sql<number>`COUNT(DISTINCT ${vendas.codCliente})`,
   })
     .from(vendas)
-    .where(eq(vendas.codVendedor, codVendedor));
+    .where(and(...conditions));
   return result[0] || null;
 }
 
-export async function getVendedorVendasPorMes(codVendedor: number) {
+export async function getVendedorVendasPorMes(codVendedor: number, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return [];
+  const conditions = [
+    eq(vendas.codVendedor, codVendedor),
+    sql`${vendas.emissaoAnoMes} IS NOT NULL`,
+  ];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   return await db.select({
     mes: vendas.emissaoAnoMes,
     total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(12,2))), 0)`,
     quantidade: sql<number>`COUNT(${vendas.id})`,
   })
     .from(vendas)
-    .where(and(
-      eq(vendas.codVendedor, codVendedor),
-      sql`${vendas.emissaoAnoMes} IS NOT NULL`
-    ))
+    .where(and(...conditions))
     .groupBy(vendas.emissaoAnoMes)
     .orderBy(vendas.emissaoAnoMes)
     .limit(12);
@@ -1618,15 +1753,19 @@ export async function getProdutosComEstoque(limit: number = 50, offset: number =
   return { data, total: countResult[0]?.total || 0 };
 }
 
-export async function getProdutosPorStatusEstoque() {
+export async function getProdutosPorStatusEstoque(empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return { ativo: 0, inativo: 0, bloqueado: 0 };
   
+  const conditions = [];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(produtos.empresa, empresaFilter));
   const result = await db.select({
     ativo: produtos.ativo,
     count: sql<number>`COUNT(*)`,
   })
     .from(produtos)
+    .where(conditions.length ? and(...conditions) : undefined)
     .groupBy(produtos.ativo);
 
   const stats = { ativo: 0, inativo: 0, bloqueado: 0 };
@@ -1677,26 +1816,32 @@ export async function deleteDreGerencial(id: number) {
   return { success: true };
 }
 
-export async function getFaturamentoByCompetencia(competencia: string) {
+export async function getFaturamentoByCompetencia(competencia: string, empresa?: EmpresaFilter) {
   const db = await getDb();
   if (!db) return 0;
+  const conditions = [eq(vendas.emissaoAnoMes, competencia)];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   const [result] = await db.select({
     total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(14,2))), 0)`,
   })
     .from(vendas)
-    .where(eq(vendas.emissaoAnoMes, competencia));
+    .where(and(...conditions));
   return Number(result?.total ?? 0);
 }
 
-export async function getFaturamentoMensalMap(): Promise<Record<string, number>> {
+export async function getFaturamentoMensalMap(empresa?: EmpresaFilter): Promise<Record<string, number>> {
   const db = await getDb();
   if (!db) return {};
+  const conditions = [sql`${vendas.emissaoAnoMes} IS NOT NULL`];
+  const empresaFilter = normalizeEmpresaFilter(empresa);
+  if (empresaFilter) conditions.push(eq(vendas.empresa, empresaFilter));
   const rows = await db.select({
     mes: vendas.emissaoAnoMes,
     total: sql<number>`COALESCE(SUM(CAST(${vendas.vlrVda} AS DECIMAL(14,2))), 0)`,
   })
     .from(vendas)
-    .where(sql`${vendas.emissaoAnoMes} IS NOT NULL`)
+    .where(and(...conditions))
     .groupBy(vendas.emissaoAnoMes)
     .orderBy(vendas.emissaoAnoMes);
 

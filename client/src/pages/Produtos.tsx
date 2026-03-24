@@ -33,6 +33,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const ITEMS_PER_PAGE = 50;
 
@@ -76,9 +77,10 @@ function ProdutoDetailModal({
   produto: any;
   onClose: () => void;
 }) {
+  const { selectedCompany } = useCompany();
   const codProduto = produto?.codProduto?.toString() || "";
   const { data: perf, isLoading } = trpc.produtos.getPerformance.useQuery(
-    { codProduto },
+    { codProduto, empresa: selectedCompany ?? undefined },
     { enabled: !!codProduto }
   );
 
@@ -177,6 +179,7 @@ function ProdutoDetailModal({
 }
 
 export default function Produtos() {
+  const { selectedCompany } = useCompany();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -197,12 +200,14 @@ export default function Produtos() {
       limit: ITEMS_PER_PAGE,
       offset: page * ITEMS_PER_PAGE,
       search: debouncedSearch || undefined,
+      empresa: selectedCompany ?? undefined,
     });
 
   const { data: topProdutos } = trpc.produtos.getTopByVendas.useQuery({
     limit: 15,
+    empresa: selectedCompany ?? undefined,
   });
-  const { data: statusEstoque } = trpc.produtos.getStatusEstoque.useQuery();
+  const { data: statusEstoque } = trpc.produtos.getStatusEstoque.useQuery({ empresa: selectedCompany ?? undefined });
 
   const totalPages = Math.ceil(
     (produtosPaginados?.total || 0) / ITEMS_PER_PAGE
@@ -496,7 +501,8 @@ export default function Produtos() {
 }
 
 function EstoqueCriticoList() {
-  const { data: result, isLoading } = trpc.estoque.getSemEstoque.useQuery({ limit: 10 });
+  const { selectedCompany } = useCompany();
+  const { data: result, isLoading } = trpc.estoque.getSemEstoque.useQuery({ limit: 10, empresa: selectedCompany ?? undefined });
   const items = result?.data;
 
   if (isLoading)

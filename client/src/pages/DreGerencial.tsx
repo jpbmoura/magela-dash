@@ -62,6 +62,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const CURRENT_MONTH = new Date().toISOString().slice(0, 7);
 
@@ -291,6 +292,7 @@ function DreStatementRow({
 }
 
 export default function DreGerencial() {
+  const { selectedCompany } = useCompany();
   const [selectedCompetencia, setSelectedCompetencia] = useState(CURRENT_MONTH);
   const [isCreating, setIsCreating] = useState(false);
   const [newCompetencia, setNewCompetencia] = useState(CURRENT_MONTH);
@@ -316,14 +318,14 @@ export default function DreGerencial() {
     }
   }, []);
 
-  const { data: dreList, isLoading: loadingList } = trpc.dre.list.useQuery();
+  const { data: dreList, isLoading: loadingList } = trpc.dre.list.useQuery({ empresa: selectedCompany ?? undefined });
   const { data: dreData, isLoading: loadingDre } =
     trpc.dre.getByCompetencia.useQuery(
-      { competencia: selectedCompetencia },
+      { competencia: selectedCompetencia, empresa: selectedCompany ?? undefined },
       { enabled: !isCreating }
     );
   const { data: resumoData, isLoading: loadingResumo } =
-    trpc.dre.getResumo.useQuery();
+    trpc.dre.getResumo.useQuery({ empresa: selectedCompany ?? undefined });
 
   // Conta Azul integration
   const { data: caStatus } = trpc.contaAzul.getStatus.useQuery();

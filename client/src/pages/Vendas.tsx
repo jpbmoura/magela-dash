@@ -30,6 +30,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useCompany } from "@/contexts/CompanyContext";
 
 const ITEMS_PER_PAGE = 50;
 const COLORS = [
@@ -84,6 +85,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function Vendas() {
+  const { selectedCompany } = useCompany();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -98,19 +100,21 @@ export default function Vendas() {
     );
   };
 
-  const { data: metrics } = trpc.vendas.getMetrics.useQuery({});
+  const { data: metrics } = trpc.vendas.getMetrics.useQuery({ empresa: selectedCompany ?? undefined });
   const { data: vendasPorMes, isLoading: loadingMes } =
-    trpc.vendas.getPorMes.useQuery({ meses: 12 });
-  const { data: vendasPorCategoria } = trpc.vendas.getPorCategoria.useQuery();
-  const { data: vendasPorCanal } = trpc.vendas.getPorCanal.useQuery();
+    trpc.vendas.getPorMes.useQuery({ meses: 12, empresa: selectedCompany ?? undefined });
+  const { data: vendasPorCategoria } = trpc.vendas.getPorCategoria.useQuery({ empresa: selectedCompany ?? undefined });
+  const { data: vendasPorCanal } = trpc.vendas.getPorCanal.useQuery({ empresa: selectedCompany ?? undefined });
   const { data: topProdutos } = trpc.dashboard.getTopProdutos.useQuery({
     limit: 10,
+    empresa: selectedCompany ?? undefined,
   });
   const { data: vendasPaginadas, isLoading: loadingVendas } =
     trpc.vendas.getPaginadas.useQuery({
       limit: ITEMS_PER_PAGE,
       offset: page * ITEMS_PER_PAGE,
       search: debouncedSearch || undefined,
+      empresa: selectedCompany ?? undefined,
     });
 
   const totalPages = Math.ceil((vendasPaginadas?.total || 0) / ITEMS_PER_PAGE);

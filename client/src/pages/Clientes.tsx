@@ -40,6 +40,7 @@ import {
   Line,
   Legend,
 } from "recharts";
+import { useCompany } from "@/contexts/CompanyContext";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtShort = (v: number) =>
@@ -165,6 +166,7 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Clientes() {
+  const { selectedCompany } = useCompany();
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
   const [tab, setTab] = useState<Tab>("ranking");
   const [search, setSearch] = useState("");
@@ -173,7 +175,7 @@ export default function Clientes() {
   const [selectedCliente, setSelectedCliente] = useState<any>(null);
   const PAGE_SIZE = 20;
 
-  const { data: availablePeriods } = trpc.dashboard.getAvailablePeriods.useQuery();
+  const { data: availablePeriods } = trpc.dashboard.getAvailablePeriods.useQuery({ empresa: selectedCompany ?? undefined });
 
   const dates = useMemo(
     () => selectedPeriod === "all" ? {} : periodToDates(selectedPeriod),
@@ -186,8 +188,9 @@ export default function Clientes() {
     () => ({
       dataInicio: dates.start,
       dataFim: dates.end,
+      empresa: selectedCompany ?? undefined,
     }),
-    [dates]
+    [dates, selectedCompany]
   );
 
   const { data: kpis, isLoading: kpisLoading } =
@@ -218,9 +221,10 @@ export default function Clientes() {
   });
   const { data: evolucao } = trpc.clientes.getEvolucaoMensal.useQuery({
     topN: 5,
+    empresa: selectedCompany ?? undefined,
   });
   const { data: stats } = trpc.clientes.getStats.useQuery(
-    { codCliente: String(selectedCliente?.codCliente) },
+    { codCliente: String(selectedCliente?.codCliente), empresa: selectedCompany ?? undefined },
     { enabled: !!selectedCliente }
   );
 

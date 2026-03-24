@@ -16,6 +16,7 @@ import {
   DollarSign, Warehouse, Trophy, ArrowRight, CalendarDays,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { useCompany } from "@/contexts/CompanyContext";
 
 function fmt(value: number | string | null | undefined): string {
   const num = typeof value === "string" ? parseFloat(value) : (value ?? 0);
@@ -50,19 +51,20 @@ function periodToDates(ym: string | undefined) {
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
+  const { selectedCompany } = useCompany();
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
 
-  const { data: availablePeriods } = trpc.dashboard.getAvailablePeriods.useQuery();
+  const { data: availablePeriods } = trpc.dashboard.getAvailablePeriods.useQuery({ empresa: selectedCompany ?? undefined });
 
   const dateFilter = useMemo(
     () => selectedPeriod === "all" ? undefined : periodToDates(selectedPeriod),
     [selectedPeriod]
   );
 
-  const { data: metrics, isLoading } = trpc.dashboard.getMetrics.useQuery(dateFilter);
-  const { data: topClientes } = trpc.dashboard.getTopClientes.useQuery({ limit: 5 });
-  const { data: topProdutos } = trpc.dashboard.getTopProdutos.useQuery({ limit: 5 });
-  const { data: vendedores } = trpc.dashboard.getVendedores.useQuery({ limit: 5 });
+  const { data: metrics, isLoading } = trpc.dashboard.getMetrics.useQuery({ ...dateFilter, empresa: selectedCompany ?? undefined });
+  const { data: topClientes } = trpc.dashboard.getTopClientes.useQuery({ limit: 5, empresa: selectedCompany ?? undefined });
+  const { data: topProdutos } = trpc.dashboard.getTopProdutos.useQuery({ limit: 5, empresa: selectedCompany ?? undefined });
+  const { data: vendedores } = trpc.dashboard.getVendedores.useQuery({ limit: 5, empresa: selectedCompany ?? undefined });
   const { data: alertas } = trpc.dashboard.getAlertas.useQuery();
 
   return (
